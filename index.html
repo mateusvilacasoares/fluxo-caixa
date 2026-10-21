@@ -755,7 +755,9 @@ setTimeout(irHoje,0);
 const SUPA_URL='https://tsfrqwtprgzvkdudphfq.supabase.co';
 const SUPA_KEY='sb_publishable_S6aHxBc1t4qc3wAffk4lYA_3Lp3kw8v';
 const sb=window.supabase.createClient(SUPA_URL,SUPA_KEY);
-let eid=null,uid=null,rt=null,busy=false,dirty=false,reloadPend=false,lastCad='';
+let eid=null,uid=null,rt=null,busy=false,dirty=false,reloadPend=false,lastCad='',falhou=false;
+const isUUID=s=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s));
+const novoId=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)});
 const snap=new Map();
 const jl=l=>JSON.stringify([l.data,l.tipo,l.cat,l.desc,+l.valor||0,l.status,l.conta||'',l.grupo||'']);
 const hora=()=>new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -778,6 +780,7 @@ async function syncNow(){
   if(!navigator.onLine){setSt('Sem internet: salvo neste aparelho','#ff8c1a');return}
   busy=true;dirty=false;
   try{
+    st.lancs.forEach(l=>{if(!isUUID(l.id))l.id=novoId()});
     const ups=[];
     st.lancs.forEach(l=>{const j=jl(l);if(snap.get(String(l.id))!==j)ups.push({l,j})});
     const ids=new Set(st.lancs.map(l=>String(l.id)));
@@ -795,10 +798,12 @@ async function syncNow(){
       dels.forEach(id=>snap.delete(id));
     }
     await syncCadastros();
+    falhou=false;
     setSt('Sincronizado às '+hora(),'#2fbf71');
   }catch(e){
     console.error(e);
-    setSt('Não sincronizou: nova tentativa em 20 s','#ff8c1a');
+    falhou=true;
+    setSt('Não sincronizou ('+(e.message||'erro')+'): nova tentativa em 20 s','#ff5b5b');
     setTimeout(syncNow,20000);
   }finally{
     busy=false;
@@ -857,11 +862,11 @@ function ligarTempoReal(){
 }
 async function recarregar(){
   if(!eid)return;
-  if(busy||dirty){reloadPend=true;return}
+  if(busy||dirty||falhou){reloadPend=true;return}
   try{
     const {data:rows,error}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).limit(10000);
     if(error)throw error;
-    if(busy||dirty){reloadPend=true;return}
+    if(busy||dirty||falhou){reloadPend=true;return}
     st.lancs=rows.map(toL);snap.clear();st.lancs.forEach(l=>snap.set(l.id,jl(l)));
     st.lancs.forEach(l=>addDesc(l.desc));
     localStorage.setItem(KEY,JSON.stringify(st));
