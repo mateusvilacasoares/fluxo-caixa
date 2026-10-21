@@ -1,4 +1,4 @@
-<!-- VERSION: 35 -->
+<!-- VERSION: 37 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -152,6 +152,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
         <select id="fConta"><option value="">Todas as contas</option></select>
         <button class="btn" onclick="irHoje()">Ir para hoje</button>
         <button class="btn" id="btnExcSel" onclick="excluirSel()">Excluir selecionados (0)</button>
+        <button class="btn" onclick="removerDuplicados()">Remover duplicados</button>
         <button class="btn" onclick="resetCols()">Restaurar larguras</button>
       </div>
       <div class="scroll" id="scrLanc"><table id="tblLanc"><thead><tr><th><input type="checkbox" id="chkAll" onchange="toggleAll(this.checked)"></th><th>Data</th><th>Descrição</th><th>Fornecedor / Cliente</th><th>Tipo</th><th>Status</th><th class="r">Valor</th><th></th></tr></thead><tbody id="lista"></tbody></table></div>
@@ -674,7 +675,8 @@ document.getElementById('btnCsv').onclick=()=>{
 document.getElementById('fileCsv').onchange=async function(e){
   const f=e.target.files[0];if(!f)return;
   const lines=(await f.text()).replace(/^\uFEFF/,'').split(/\r?\n/).filter(Boolean).slice(1);
-  let n=0;
+  let n=0,dup=0;
+  const exs=new Set(st.lancs.map(sigL));
   lines.forEach(line=>{
     const c=line.split(';').map(x=>x.replace(/^"|"$/g,'').trim());
     if(c.length<5||!normData(c[0]))return;
@@ -682,14 +684,25 @@ document.getElementById('fileCsv').onchange=async function(e){
     val=val.includes(',')?parseFloat(val.replace(/\./g,'').replace(',','.')):parseFloat(val);
     const tipo=/^ent|^rec/i.test(c[1])?'entrada':'saida';
     const status=/^prev/i.test(c[5]||'')?'prev':'ok';
-    st.lancs.push({id:String(Date.now()+Math.random()),data:normData(c[0]),tipo,cat:c[2]||'Geral',desc:c[3]||'',valor:val||0,status,conta:c[6]||''});
+    const novo={id:String(Date.now()+Math.random()),data:normData(c[0]),tipo,cat:c[2]||'Geral',desc:c[3]||'',valor:val||0,status,conta:c[6]||''};
+    if(exs.has(sigL(novo))){dup++;return}
+    exs.add(sigL(novo));st.lancs.push(novo);
     addDesc(c[3]);n++;
   });
   save();render();
-  alert(n+' lançamento(s) importado(s).');
+  alert(n+' lançamento(s) importado(s). '+dup+' duplicado(s) ignorado(s).');
   e.target.value='';
 };
 
+function sigL(l){return [l.data,l.tipo,l.cat,l.desc,+l.valor].join('|')}
+function removerDuplicados(){
+  const vistos=new Set();const manter=[];let rm=0;
+  st.lancs.forEach(l=>{const s=sigL(l);if(vistos.has(s)){rm++}else{vistos.add(s);manter.push(l)}});
+  if(!rm)return alert('Nenhum lançamento duplicado encontrado.');
+  if(!confirm(rm+' lançamento(s) duplicado(s) serão removidos (mantendo uma cópia de cada). Continuar?'))return;
+  st.lancs=manter;selIds.clear();save();render();
+  alert(rm+' duplicado(s) removido(s).');
+}
 function irHoje(){
   const alvo=[['scrDias','tr.hojeRow'],['scrLanc','tr.hojeRow']];
   alvo.forEach(([cid,sel])=>{
@@ -875,7 +888,7 @@ async function iniciarNuvem(){
 function importarLocal(){
   let bak=[];try{bak=JSON.parse(localStorage.getItem(KEY+'_bak')||'[]')}catch(e){}
   if(!bak.length)return alert('Não há dados locais guardados neste aparelho.');
-  const sig=l=>[l.data,l.tipo,l.cat,l.desc,+l.valor].join('|');
+  const sig=sigL;
   const ex=new Set(st.lancs.map(sig));
   let n=0;
   bak.forEach(l=>{if(!ex.has(sig(l))){ex.add(sig(l));st.lancs.push(Object.assign({},l,{id:String(Date.now())+Math.random(),_cb:uid}));n++}});
@@ -883,8 +896,10 @@ function importarLocal(){
   save();render();
   alert(n+' lançamento(s) importado(s) para a nuvem. Duplicados não foram criados.');
 }
-window.addEventListener('online',()=>{if(eid)syncNow()});
-setInterval(()=>{if(eid&&navigator.onLine)syncNow()},30000);
+window.addEventListener('online',()=>{if(eid){syncNow();recarregar()}});
+setInterval(()=>{if(eid&&navigator.onLine){syncNow();recarregar()}},20000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&eid)recarregar()});
+window.addEventListener('focus',()=>{if(eid)recarregar()});
 iniciarNuvem();
 </script>
 </body>
