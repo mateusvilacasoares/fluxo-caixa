@@ -1,4 +1,4 @@
-<!-- VERSION: 38 -->
+<!-- VERSION: 52 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -67,6 +67,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
 .si{color:var(--rec);margin-right:4px;font-size:10px}
 .prv-rec{color:#f5d000;font-weight:600}
 .prv-des{color:#ff8c1a;font-weight:600}
+.panel.fixo{position:sticky;top:0;z-index:30;max-height:70vh;overflow:auto;box-shadow:0 8px 22px rgba(0,0,0,.5)}
 </style></head>
 <body>
 <div id="erro" style="display:none;background:#5a1d1d;color:#fff;padding:10px 24px;font-size:13px"></div>
@@ -91,15 +92,14 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
 </header>
 <main>
   <div class="kpis">
-    <div class="kpi"><small>Saldo inicial</small><b id="kIni">-</b></div>
+    <div class="kpi k-ok"><small>Saldo em hoje</small><b id="kHoje">-</b></div>
     <div class="kpi k-rec"><small>Receitas (período)</small><b class="rec" id="kRec">-</b></div>
     <div class="kpi k-des"><small>Despesas (período)</small><b class="des" id="kDes">-</b></div>
-    <div class="kpi k-ok"><small>Saldo em hoje</small><b id="kHoje">-</b></div>
     <div class="kpi"><small>Saldo projetado (fim)</small><b id="kFim">-</b></div>
   </div>
 
   <div class="panel">
-    <h2>Novo lançamento</h2>
+    <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Novo lançamento<button class="btn" type="button" id="btnFixo" style="padding:4px 10px;font-size:12px;text-transform:none">Congelar tela</button></h2>
     <form id="form">
       <input type="hidden" id="id">
       <label>Data<input type="date" id="data" required></label>
@@ -133,8 +133,9 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
       <div id="matriz"></div>
     </div>
     <div class="panel" id="dirPanel">
-      <h2 id="tituloDir">Evolução do saldo diário</h2>
-      <svg id="chart" viewBox="0 0 600 260" width="100%" preserveAspectRatio="xMidYMid meet"></svg>
+      <h2 id="tituloDir">Receitas e despesas por conta contábil (R$)</h2>
+      <div class="filtros" style="margin:0 0 10px"><label style="flex-direction:row;align-items:center;gap:6px">De<input type="date" id="gIni"></label><label style="flex-direction:row;align-items:center;gap:6px">Até<input type="date" id="gFim"></label><button class="btn" id="gLimpar">Período padrão</button><label style="flex-direction:row;align-items:center;gap:6px">Agrupar por<select id="gAgr"><option value="conta">Conta contábil</option><option value="desc">Descrição</option><option value="cat">Fornecedor / Cliente</option></select></label><label style="flex-direction:row;align-items:center;gap:6px">Mostrar<select id="gMostrar"><option value="ambos">Receitas e despesas</option><option value="entrada">Só receitas</option><option value="saida">Só despesas</option></select></label><button class="btn p" type="button" onclick="abrirSelGraf()">Escolher itens do gráfico</button></div>
+      <div id="chart"><div id="blkR"><div class="mut" style="font-size:12px;margin:4px 0">Receitas</div><svg id="chartR" viewBox="0 0 600 260" width="100%" preserveAspectRatio="xMidYMid meet"></svg></div><div id="blkD" style="margin-top:14px"><div class="mut" style="font-size:12px;margin:4px 0">Despesas</div><svg id="chartD" viewBox="0 0 600 260" width="100%" preserveAspectRatio="xMidYMid meet"></svg></div></div>
       <div id="relDia" style="display:none"></div>
     </div>
   </div>
@@ -165,6 +166,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
     <div class="acoes">
       <button class="btn p" onclick="abrirGestor('desc')">Gerenciar descrições</button>
       <button class="btn p" onclick="abrirGestor('forn')">Gerenciar fornecedores / clientes</button>
+      <button class="btn p" onclick="abrirContas()">Gerenciar contas contábeis</button>
     </div>
   </div>
 </main>
@@ -212,6 +214,47 @@ st.descs=st.descs||[];
 st.contas=st.contas||CONTAS.map(([g,it])=>[g,[...it]]);
 st.lancs.forEach(function(l){if(!l.conta)return;const ex=st.contas.some(g=>g[1].includes(l.conta));if(!ex){let o=st.contas.find(g=>g[0]==='Outras contas (importadas)');if(!o){o=['Outras contas (importadas)',[]];st.contas.push(o)}o[1].push(l.conta)}});
 function novaConta(){
+  const ov=document.createElement('div');
+  ov.className='overlay';ov.style.display='flex';
+  ov.innerHTML=`<div class="modalbox" style="width:min(440px,100%)">
+    <h2 style="margin:0 0 12px;font-size:15px">Nova sub-conta contábil</h2>
+    <label>Nome da sub-conta<input id="ncNome" autocomplete="off" style="width:100%"></label>
+    <label style="margin-top:10px">Vincular à conta contábil (DRE)<select id="ncSec" style="width:100%">${st.contas.map((g,i)=>`<option value="${i}">${esc(g[0])}</option>`).join('')}</select></label>
+    <label style="margin-top:10px">Ou criar uma nova conta contábil (opcional)<input id="ncNova" autocomplete="off" style="width:100%" placeholder="Deixe vazio para usar a selecionada"></label>
+    <div class="acoes" style="margin-top:14px"><button class="btn p" id="ncOk">Criar e selecionar</button><button class="btn" id="ncCancel">Cancelar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const fechar=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)fechar()};
+  document.getElementById('ncCancel').onclick=fechar;
+  document.getElementById('ncNome').focus();
+  document.getElementById('ncOk').onclick=()=>{
+    const nome=document.getElementById('ncNome').value.trim();
+    const nova=document.getElementById('ncNova').value.trim();
+    if(!nome)return alert('Informe o nome da sub-conta.');
+    let g=nova
+      ?(st.contas.find(x=>x[0].toLowerCase()===nova.toLowerCase())||(()=>{const n=[nova,[]];st.contas.push(n);return n})())
+      :st.contas[+document.getElementById('ncSec').value];
+    const atual=st.contas.find(x=>x[1].some(c=>c.toLowerCase()===nome.toLowerCase()));
+    if(atual){
+      if(atual===g){alert('Essa sub-conta já existe em "'+g[0]+'". Ela foi selecionada.')}
+      else if(confirm('A sub-conta "'+nome+'" já existe em "'+atual[0]+'".\n\nMover para "'+g[0]+'"?')){
+        atual[1]=atual[1].filter(c=>c.toLowerCase()!==nome.toLowerCase());
+        g[1].push(atual[1]&&nome);
+        g[1]=[...new Set(g[1])];
+        save();
+      }
+    }else{
+      g[1].push(nome);
+      save();
+    }
+    fechar();
+    document.getElementById('conta').innerHTML=contasOpts(nome);
+    document.getElementById('conta').value=nome;
+    render();
+  };
+}
+function novaContaAntiga(){
   const nome=(prompt('Nome da nova conta contábil:')||'').trim();
   if(!nome)return;
   const existe=st.contas.find(g=>g[1].some(c=>c.toLowerCase()===nome.toLowerCase()));
@@ -231,7 +274,7 @@ function novaConta(){
 }
 st.lancs.forEach(function(l){l.data=normData(l.data);l.valor=+l.valor||0;addDesc(l.desc)});
 
-let pIni='',pFim='',diaSel=null,modoGrafico=false,editId=null,gestorTipo=null,colapsado=new Set(),selIds=new Set();
+let gIni='',gFim='',pIni='',pFim='',diaSel=null,modoGrafico=false,editId=null,gestorTipo=null,colapsado=new Set(),selIds=new Set();
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const DSEM=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],MES3=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -376,7 +419,99 @@ function renderLista(){
   document.getElementById('lista').innerHTML=lista.length?lista.map(l=>`<tr class="${l.data===hojeISO()?'hojeRow':''}"><td><input type="checkbox" class="chkL" value="${l.id}" ${selIds.has(l.id)?'checked':''} onchange="updSel(this)"></td><td>${fmtData(l.data)}</td><td>${esc(l.desc)}<br><small class="mut">${esc(l.conta||'Não classificado')}</small></td><td>${esc(l.cat)}</td><td class="${corLanc(l)}">${l.tipo==='entrada'?'Receita':'Despesa'}</td><td class="${corLanc(l)}">${l.status==='ok'?'PAGO':'PREVISTO'}</td><td class="r ${corLanc(l)}">${fmt(l.valor)}</td><td><button class="e" onclick="editar('${l.id}')">editar</button> ${botoesPrev(l)}<button class="d" onclick="excluir('${l.id}')">excluir</button></td></tr>`).join(''):'<tr><td colspan="8" class="vazio">Nenhum lançamento</td></tr>';
 }
 
-function drawChart(ds){
+function rotRec(l){const d=(l.desc||'').toLowerCase();if(d.includes('atacado'))return 'Vendas atacado';if(d.includes('online'))return 'Vendas online';return (l.desc||'').trim()||'Outras receitas'}
+let selG={};
+try{selG=JSON.parse(localStorage.getItem(KEY+'_selg')||'{}')||{}}catch(e){selG={}}
+function keyOf(l,tipo,agr){if(agr==='cat')return (l.cat||'').trim()||'Sem fornecedor / cliente';if(agr==='desc')return ((l.desc||'').trim()||'Sem descrição');return (tipo==='entrada'?rotRec(l):(l.conta||'Não classificado'))}
+function selOk(tipo,agr,k){const s=selG[tipo+'|'+agr];return !s||s.includes(k)}
+function keysOf(t,agr){return [...new Set(st.lancs.filter(l=>(l.tipo==='entrada')===(t==='entrada')).map(l=>keyOf(l,t,agr)))].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
+function abrirSelGraf(){
+  let agr=document.getElementById('gAgr').value;
+  const load=a=>({entrada:new Set(selG['entrada|'+a]||keysOf('entrada',a)),saida:new Set(selG['saida|'+a]||keysOf('saida',a))});
+  let draft=load(agr);
+  const ov=document.createElement('div');ov.className='overlay';ov.style.display='flex';
+  ov.innerHTML=`<div class="modalbox" style="width:min(520px,100%)">
+    <h2 style="margin:0 0 10px;font-size:15px">Escolher itens do gráfico</h2>
+    <div class="acoes"><label style="flex-direction:row;align-items:center;gap:6px">Gráfico<select id="sgTipo"><option value="entrada">Receitas</option><option value="saida">Despesas</option></select></label><label style="flex-direction:row;align-items:center;gap:6px">Listar por<select id="sgAgr"><option value="desc">Descrição</option><option value="cat">Fornecedor / Cliente</option><option value="conta">Conta contábil</option></select></label></div>
+    <div class="acoes"><button class="btn" id="sgAll">Marcar todos</button><button class="btn" id="sgNone">Desmarcar todos</button></div>
+    <div id="sgList" class="scroll" style="max-height:50vh;border:1px solid var(--line);border-radius:6px;padding:8px"></div>
+    <div class="acoes" style="margin-top:12px"><button class="btn p" id="sgOk">Aplicar</button><button class="btn" id="sgCancel">Fechar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#sgAgr').value=agr;
+  const tp=()=>ov.querySelector('#sgTipo').value;
+  const draw=()=>{const t=tp(),ks=keysOf(t,agr);ov.querySelector('#sgList').innerHTML=ks.length?ks.map(k=>`<label class="chk" style="padding:4px 0;text-transform:none;font-size:13px"><input type="checkbox" value="${esc(k)}" ${draft[t].has(k)?'checked':''}> ${esc(k)}</label>`).join(''):'<span class="mut">Nenhum lançamento deste tipo.</span>'};
+  const fechar=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)fechar()};
+  ov.querySelector('#sgTipo').onchange=draw;
+  ov.querySelector('#sgAgr').onchange=e=>{agr=e.target.value;draft=load(agr);draw()};
+  ov.querySelector('#sgList').onchange=e=>{const t=tp();if(e.target.type!=='checkbox')return;e.target.checked?draft[t].add(e.target.value):draft[t].delete(e.target.value)};
+  ov.querySelector('#sgAll').onclick=()=>{const t=tp();keysOf(t,agr).forEach(k=>draft[t].add(k));draw()};
+  ov.querySelector('#sgNone').onclick=()=>{draft[tp()].clear();draw()};
+  ov.querySelector('#sgCancel').onclick=fechar;
+  ov.querySelector('#sgOk').onclick=()=>{
+    ['entrada','saida'].forEach(t=>{const all=keysOf(t,agr),ch=all.filter(k=>draft[t].has(k));selG[t+'|'+agr]=ch.length===all.length?null:ch});
+    localStorage.setItem(KEY+'_selg',JSON.stringify(selG));
+    document.getElementById('gAgr').value=agr;
+    fechar();render();
+  };
+  draw();
+}
+function abrirSelGrafOld(){
+  const agr=document.getElementById('gAgr').value;
+  const draft={entrada:new Set(selG['entrada|'+agr]||keysOf('entrada',agr)),saida:new Set(selG['saida|'+agr]||keysOf('saida',agr))};
+  const ov=document.createElement('div');ov.className='overlay';ov.style.display='flex';
+  ov.innerHTML=`<div class="modalbox" style="width:min(520px,100%)">
+    <h2 style="margin:0 0 10px;font-size:15px">Escolher itens do gráfico</h2>
+    <div class="acoes"><label style="flex-direction:row;align-items:center;gap:6px">Gráfico<select id="sgTipo"><option value="entrada">Receitas</option><option value="saida">Despesas</option></select></label><span class="mut" style="font-size:12px;text-transform:none">Agrupado por: ${agr==='desc'?'descrição':'conta contábil'}</span></div>
+    <div class="acoes"><button class="btn" id="sgAll">Marcar todos</button><button class="btn" id="sgNone">Desmarcar todos</button></div>
+    <div id="sgList" class="scroll" style="max-height:50vh;border:1px solid var(--line);border-radius:6px;padding:8px"></div>
+    <div class="acoes" style="margin-top:12px"><button class="btn p" id="sgOk">Aplicar</button><button class="btn" id="sgCancel">Fechar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const tp=()=>ov.querySelector('#sgTipo').value;
+  const draw=()=>{const t=tp(),ks=keysOf(t,agr);ov.querySelector('#sgList').innerHTML=ks.length?ks.map(k=>`<label class="chk" style="padding:4px 0;text-transform:none;font-size:13px"><input type="checkbox" value="${esc(k)}" ${draft[t].has(k)?'checked':''}> ${esc(k)}</label>`).join(''):'<span class="mut">Nenhum lançamento deste tipo.</span>'};
+  const fechar=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)fechar()};
+  ov.querySelector('#sgTipo').onchange=draw;
+  ov.querySelector('#sgList').onchange=e=>{const t=tp();if(e.target.type!=='checkbox')return;e.target.checked?draft[t].add(e.target.value):draft[t].delete(e.target.value)};
+  ov.querySelector('#sgAll').onclick=()=>{const t=tp();keysOf(t,agr).forEach(k=>draft[t].add(k));draw()};
+  ov.querySelector('#sgNone').onclick=()=>{draft[tp()].clear();draw()};
+  ov.querySelector('#sgCancel').onclick=fechar;
+  ov.querySelector('#sgOk').onclick=()=>{
+    ['entrada','saida'].forEach(t=>{const all=keysOf(t,agr),ch=all.filter(k=>draft[t].has(k));selG[t+'|'+agr]=ch.length===all.length?null:ch});
+    localStorage.setItem(KEY+'_selg',JSON.stringify(selG));
+    fechar();render();
+  };
+  draw();
+}
+function drawChart(ds,tipo,svgId){
+  const svg=document.getElementById(svgId),pd=periodo(),lo=gIni||pd.lo,hi=gFim||pd.hi;
+  const grp={};
+  const agr=document.getElementById('gAgr').value,flt='';
+  st.lancs.forEach(l=>{if(l.data<lo||l.data>hi)return;if((l.tipo==='entrada')!==(tipo==='entrada'))return;if(flt&&!((l.desc||'')+' '+(l.cat||'')).toLowerCase().includes(flt))return;const k=keyOf(l,tipo,agr);if(!selOk(tipo,agr,k))return;grp[k]=grp[k]||{n:k,val:0,rec:tipo==='entrada'};grp[k].val+=(+l.valor||0)});
+  let itens=Object.values(grp).filter(x=>x.val>0).sort((a,b)=>b.val-a.val).map(x=>[x.n,x.val,x.rec]);
+  if(itens.length>10){const top=itens.slice(0,9),resto=itens.slice(9).reduce((a,x)=>a+x[1],0);itens=[...top,['Outras contas',resto,null]]}
+  if(!itens.length){svg.innerHTML='<text x="300" y="130" text-anchor="middle" fill="#9b9ba7">Sem lançamentos no período</text>';return}
+  const tot=itens.reduce((a,[,x])=>a+x,0);
+  const cx=130,cy=130,R=100,r=52;
+  const palR=['#4fa3ff','#2fbf71','#22d3ee','#3b82f6','#34d399','#60a5fa','#10b981','#38bdf8'];
+  const palD=['#ff5b5b','#ff8c1a','#f5b000','#f472b6','#e11d48','#fb923c','#dc2626','#facc15'];
+  let iR=0,iD=0;
+  let ang=-Math.PI/2,paths='',leg='';
+  const pt=(a,rad)=>[cx+rad*Math.cos(a),cy+rad*Math.sin(a)].map(x=>x.toFixed(1)).join(',');
+  itens.forEach(([n,val,rec],i)=>{
+    const frac=val/tot,a2=ang+frac*2*Math.PI;
+    const cor=rec===true?palR[(iR++)%palR.length]:rec===false?palD[(iD++)%palD.length]:'#94a3b8';
+    if(itens.length===1){paths+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="${cor}"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="#2a2a31"/>`}
+    else paths+=`<path d="M${pt(ang,R)} A${R},${R} 0 ${frac>0.5?1:0} 1 ${pt(a2,R)} L${pt(a2,r)} A${r},${r} 0 ${frac>0.5?1:0} 0 ${pt(ang,r)} Z" fill="${cor}" stroke="#2a2a31" stroke-width="1.5"><title>${esc(n)}: ${fmt(val)}</title></path>`;
+    ang=a2;
+    const y=18+i*22;
+    leg+=`<rect x="290" y="${y-10}" width="12" height="12" rx="2" fill="${cor}"/><text x="308" y="${y}" fill="#ececf1" font-size="12">${esc(n.length>26?n.slice(0,25)+'…':n)}</text><text x="590" y="${y}" text-anchor="end" fill="#ececf1" font-size="12" font-weight="600">${fmt(val)} · ${(frac*100).toFixed(1)}%</text>`;
+  });
+  svg.innerHTML=paths+`<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="#9b9ba7" font-size="11">Total</text><text x="${cx}" y="${cy+14}" text-anchor="middle" fill="#ececf1" font-size="12" font-weight="600">${fmt(tot)}</text>`+leg;
+}
+function drawChartLinha(ds){
   const svg=document.getElementById('chart'),{lo,hi}=periodo();
   const vis=ds.filter(d=>d.data>=lo&&d.data<=hi);
   if(vis.length<2){svg.innerHTML='<text x="300" y="130" text-anchor="middle" fill="#9b9ba7">Sem dados no período</text>';return}
@@ -459,7 +594,7 @@ function initRelCols(){
 
 function renderDia(ds){
   const svg=document.getElementById('chart'),rel=document.getElementById('relDia'),tit=document.getElementById('tituloDir');
-  if(modoGrafico||!diaSel){svg.style.display='';rel.style.display='none';tit.textContent='Evolução do saldo diário';return}
+  if(modoGrafico||!diaSel){svg.style.display='';rel.style.display='none';tit.textContent='Receitas e despesas por conta contábil (R$)';return}
   svg.style.display='none';rel.style.display='';
   tit.textContent='Lançamentos de '+fmtData(diaSel)+' · '+diaSem(diaSel);
   const x=ds.find(d=>d.data===diaSel)||{ent:0,sai:0,acum:0};
@@ -524,6 +659,7 @@ function abrirGestor(t){
 function fecharGestor(){gestorTipo=null;document.getElementById('modal').style.display='none';render()}
 function renderGestor(){
   if(!gestorTipo)return;
+  if(gestorTipo==='conta')return renderContas();
   const q=(document.getElementById('mBusca').value||'').trim().toLowerCase();
   let rows=gestorTipo==='desc'
     ?st.descs.map((d,i)=>({n:d,i,c:st.lancs.filter(l=>l.desc===d).length}))
@@ -557,6 +693,43 @@ function removerDesc(i){
   st.descs.splice(i,1);save();renderGestor();render();
 }
 
+let contaRows=[];
+function abrirContas(){
+  gestorTipo='conta';
+  document.getElementById('mTit').textContent='Contas contábeis (DRE)';
+  document.getElementById('mCol1').textContent='Seção / Sub-conta';
+  document.getElementById('mDesc').textContent='Altere o nome de uma seção da DRE ou de uma sub-conta. Os lançamentos vinculados são atualizados automaticamente.';
+  document.getElementById('mBusca').value='';
+  document.getElementById('modal').style.display='flex';
+  renderGestor();
+}
+function renderContas(){
+  const q=(document.getElementById('mBusca').value||'').trim().toLowerCase();
+  contaRows=[];
+  st.contas.forEach((g,gi)=>{
+    contaRows.push({tipo:'secao',gi,nome:g[0],c:st.lancs.filter(l=>l.conta&&g[1].includes(l.conta)).length});
+    g[1].forEach((c,ci)=>contaRows.push({tipo:'conta',gi,ci,nome:c,c:st.lancs.filter(l=>l.conta===c).length}));
+  });
+  const rows=contaRows.map((r,k)=>Object.assign({k},r)).filter(r=>!q||r.nome.toLowerCase().includes(q));
+  document.getElementById('mBody').innerHTML=rows.length?rows.map(r=>`<tr><td><small class="mut">${r.tipo==='secao'?'Seção DRE':'Sub-conta'}</small><br><input id="cn${r.k}" value="${esc(r.nome)}" style="width:100%"></td><td class="r">${r.c}</td><td class="r"><button class="p btn" onclick="salvarConta(${r.k})">Salvar</button></td></tr>`).join(''):'<tr><td colspan="3" class="vazio">Nada encontrado</td></tr>';
+}
+function salvarConta(k){
+  const r=contaRows[k];if(!r)return;
+  const nova=v('cn'+k).trim();
+  if(!nova)return alert('Informe um nome.');
+  if(nova===r.nome)return;
+  if(r.tipo==='secao'){
+    if(st.contas.some((g,i)=>i!==r.gi&&g[0].toLowerCase()===nova.toLowerCase()))return alert('Já existe uma seção com esse nome.');
+    if(!confirm(`Renomear a seção "${r.nome}" para "${nova}"?`))return;
+    st.contas[r.gi][0]=nova;
+  }else{
+    if(st.contas.some(g=>g[1].some((c,j)=>c.toLowerCase()===nova.toLowerCase()&&!(g===st.contas[r.gi]&&j===r.ci))))return alert('Já existe uma sub-conta com esse nome.');
+    if(!confirm(`Renomear a sub-conta "${r.nome}" para "${nova}" em ${r.c} lançamento(s)?`))return;
+    st.contas[r.gi][1][r.ci]=nova;
+    st.lancs.forEach(l=>{if(l.conta===r.nome)l.conta=nova});
+  }
+  save();renderContas();render();
+}
 const DIAS_SEM=[0,1,2,3,4,5,6];
 function buildRec(){
   document.getElementById('recSem').innerHTML=DSEM.map((n,i)=>`<label class="chk"><input type="checkbox" name="rs" value="${i}">${n}</label>`).join('');
@@ -626,11 +799,11 @@ document.getElementById('form').onsubmit=function(ev){
 function render(){
   try{
     const ds=calcDias(),h=hojeISO();
-    const sh=(ds.find(x=>x.data===h)||ds.filter(x=>x.data<h).pop()||{acum:+st.saldoIni}).acum;
+    const sh=+st.saldoIni+validos().filter(l=>l.data<=h).reduce((a,l)=>a+(l.tipo==='entrada'?1:-1)*(+l.valor||0),0);
     const sf=ds.length?ds[ds.length-1].acum:+st.saldoIni;
     const vis=ds.filter(x=>inPer(x.data));
     const ent=vis.reduce((a,x)=>a+x.ent,0),sai=vis.reduce((a,x)=>a+x.sai,0);
-    [['kIni',fmt(+st.saldoIni)],['kRec',fmt(ent)],['kDes',fmt(sai)],['kHoje',fmt(sh)],['kFim',fmt(sf)]].forEach(([id,val])=>document.getElementById(id).textContent=val);
+    [['kRec',fmt(ent)],['kDes',fmt(sai)],['kHoje',fmt(sh)],['kFim',fmt(sf)]].forEach(([id,val])=>document.getElementById(id).textContent=val);
     document.getElementById('saldoIni').value=st.saldoIni;
     document.getElementById('descs').innerHTML=st.descs.map(d=>`<option value="${esc(d)}">`).join('');
     atualizaCats();
@@ -643,7 +816,11 @@ function render(){
     renderPlanilha(ds);
     renderLista();
     updSel();
-    drawChart(ds);
+    drawChart(ds,'entrada','chartR');
+    drawChart(ds,'saida','chartD');
+    const mo=document.getElementById('gMostrar').value;
+    document.getElementById('blkR').style.display=(mo==='ambos'||mo==='entrada')?'':'none';
+    document.getElementById('blkD').style.display=(mo==='ambos'||mo==='saida')?'':'none';
     renderDia(ds);
     if(gestorTipo)renderGestor();
     const erroEl=document.getElementById('erro');if(erroEl)erroEl.style.display='none';
@@ -663,6 +840,11 @@ document.getElementById('pFim').onchange=e=>{pFim=e.target.value;render()};
 document.getElementById('pLimpar').onclick=()=>{pIni='';pFim='';v2('pIni','');v2('pFim','');render()};
 document.getElementById('pAno').onclick=()=>{const y=document.getElementById('pAnoSel').value;pIni=y+'-01-01';pFim=y+'-12-31';v2('pIni',pIni);v2('pFim',pFim);render();document.getElementById('matriz').scrollTop=0};
 document.getElementById('saldoIni').onchange=e=>{st.saldoIni=+e.target.value||0;save();render()};
+document.getElementById('gIni').onchange=e=>{gIni=e.target.value;render()};
+document.getElementById('gFim').onchange=e=>{gFim=e.target.value;render()};
+document.getElementById('gLimpar').onclick=()=>{gIni='';gFim='';v2('gIni','');v2('gFim','');render()};
+document.getElementById('gAgr').onchange=render;
+document.getElementById('gMostrar').onchange=render;
 
 document.getElementById('btnCsv').onclick=()=>{
   const rows=[['data','tipo','categoria','descricao','valor','status','conta'],...st.lancs.map(l=>[l.data,l.tipo,l.cat,l.desc,String(l.valor).replace('.',','),l.status,l.conta||''])];
@@ -905,6 +1087,9 @@ window.addEventListener('online',()=>{if(eid){syncNow();recarregar()}});
 setInterval(()=>{if(eid&&navigator.onLine){syncNow();recarregar()}},20000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&eid)recarregar()});
 window.addEventListener('focus',()=>{if(eid)recarregar()});
+function aplicaFixo(on){const p=document.getElementById('form').closest('.panel');p.classList.toggle('fixo',on);document.getElementById('btnFixo').textContent=on?'Descongelar tela':'Congelar tela';localStorage.setItem(KEY+'_fixo',on?'1':'0')}
+document.getElementById('btnFixo').onclick=()=>aplicaFixo(!document.getElementById('form').closest('.panel').classList.contains('fixo'));
+aplicaFixo(localStorage.getItem(KEY+'_fixo')==='1');
 iniciarNuvem();
 </script>
 </body>
