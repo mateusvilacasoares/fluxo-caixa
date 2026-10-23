@@ -118,7 +118,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
       </div>
       <div style="display:flex;gap:8px"><button class="btn p" type="submit" id="btnSalvar">Adicionar</button><button class="btn" type="button" id="btnCancel" style="display:none">Cancelar</button></div>
     </form>
-    <div class="acoes"><label style="flex-direction:row;align-items:center;gap:8px">Saldo inicial (R$)<input type="number" step="0.01" id="saldoIni" style="width:150px"></label></div>
+    
   </div>
 
   <div class="grid2">
@@ -208,8 +208,8 @@ function contasOpts(sel){return '<option value="">Selecione a conta</option>'+st
 const KEY='fluxo_caixa_v1';
 let st;
 try{st=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){st=null}
-if(!st||!Array.isArray(st.lancs))st={saldoIni:6202.11,lancs:[],descs:[]};
-if(!localStorage.getItem(KEY+'_saldo_v2')){st.saldoIni=6202.11;localStorage.setItem(KEY+'_saldo_v2','1')}
+if(!st||!Array.isArray(st.lancs))st={saldoIni:0,lancs:[],descs:[]};
+st.saldoIni=0;
 st.descs=st.descs||[];
 st.contas=st.contas||CONTAS.map(([g,it])=>[g,[...it]]);
 st.lancs.forEach(function(l){if(!l.conta)return;const ex=st.contas.some(g=>g[1].includes(l.conta));if(!ex){let o=st.contas.find(g=>g[0]==='Outras contas (importadas)');if(!o){o=['Outras contas (importadas)',[]];st.contas.push(o)}o[1].push(l.conta)}});
@@ -805,7 +805,7 @@ function render(){
     const vis=ds.filter(x=>inPer(x.data));
     const ent=vis.reduce((a,x)=>a+x.ent,0),sai=vis.reduce((a,x)=>a+x.sai,0);
     [['kRec',fmt(ent)],['kDes',fmt(sai)],['kHoje',fmt(sh)],['kFim',fmt(sf)]].forEach(([id,val])=>document.getElementById(id).textContent=val);
-    document.getElementById('saldoIni').value=st.saldoIni;
+    
     document.getElementById('descs').innerHTML=st.descs.map(d=>`<option value="${esc(d)}">`).join('');
     atualizaCats();
     const fc=document.getElementById('fCat'),cur=fc.value;
@@ -840,7 +840,7 @@ document.getElementById('pIni').onchange=e=>{pIni=e.target.value;render()};
 document.getElementById('pFim').onchange=e=>{pFim=e.target.value;render()};
 document.getElementById('pLimpar').onclick=()=>{pIni='';pFim='';v2('pIni','');v2('pFim','');render()};
 document.getElementById('pAno').onclick=()=>{const y=document.getElementById('pAnoSel').value;pIni=y+'-01-01';pFim=y+'-12-31';v2('pIni',pIni);v2('pFim',pFim);render();document.getElementById('matriz').scrollTop=0};
-document.getElementById('saldoIni').onchange=async e=>{st.saldoIni=+e.target.value||0;save();if(eid){const {error}=await sb.from('empresas').update({saldo_ini:st.saldoIni}).eq('id',eid);if(error)setSt('Erro ao salvar saldo inicial: '+error.message,'#ff5b5b')}render()};
+
 document.getElementById('gIni').onchange=e=>{gIni=e.target.value;render()};
 document.getElementById('gFim').onchange=e=>{gFim=e.target.value;render()};
 document.getElementById('gLimpar').onclick=()=>{gIni='';gFim='';v2('gIni','');v2('gFim','');render()};
@@ -1015,8 +1015,7 @@ async function carregarTudo(){
   if(e0)throw e0;
   if(!m||!m.length){setSt('Seu usuário ainda não está vinculado a uma empresa','#ff5b5b');throw new Error('sem empresa')}
   eid=m[0].empresa_id;
-  const {data:emp,error:e00}=await sb.from('empresas').select('saldo_ini').eq('id',eid).maybeSingle();
-  if(!e00&&emp&&emp.saldo_ini!=null)st.saldoIni=+emp.saldo_ini;
+  st.saldoIni=0;
   const {data:rows,error:e1}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).limit(10000);
   if(e1)throw e1;
   const {data:cads,error:e2}=await sb.from('cadastros').select('tipo,nome').eq('empresa_id',eid);
@@ -1052,7 +1051,7 @@ async function recarregar(){
     const {data:rows,error}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).limit(10000);
     if(error)throw error;
     if(busy||dirty||falhou){reloadPend=true;return}
-    const {data:emp2}=await sb.from('empresas').select('saldo_ini').eq('id',eid).maybeSingle();if(emp2&&emp2.saldo_ini!=null)st.saldoIni=+emp2.saldo_ini;
+    
     st.lancs=rows.map(toL);snap.clear();st.lancs.forEach(l=>snap.set(l.id,jl(l)));
     st.lancs.forEach(l=>addDesc(l.desc));
     localStorage.setItem(KEY,JSON.stringify(st));
