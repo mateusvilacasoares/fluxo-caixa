@@ -1,4 +1,4 @@
-<!-- VERSION: 52 -->
+<!-- VERSION: 54 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -794,6 +794,7 @@ document.getElementById('form').onsubmit=function(ev){
   const i=st.lancs.findIndex(x=>x.id===id);
   if(i<0)st.lancs.push(l);else st.lancs[i]=l;
   addDesc(l.desc);save();limpar();render();
+  document.getElementById('cat').focus();
 };
 
 function render(){
@@ -839,7 +840,7 @@ document.getElementById('pIni').onchange=e=>{pIni=e.target.value;render()};
 document.getElementById('pFim').onchange=e=>{pFim=e.target.value;render()};
 document.getElementById('pLimpar').onclick=()=>{pIni='';pFim='';v2('pIni','');v2('pFim','');render()};
 document.getElementById('pAno').onclick=()=>{const y=document.getElementById('pAnoSel').value;pIni=y+'-01-01';pFim=y+'-12-31';v2('pIni',pIni);v2('pFim',pFim);render();document.getElementById('matriz').scrollTop=0};
-document.getElementById('saldoIni').onchange=e=>{st.saldoIni=+e.target.value||0;save();render()};
+document.getElementById('saldoIni').onchange=async e=>{st.saldoIni=+e.target.value||0;save();if(eid){const {error}=await sb.from('empresas').update({saldo_ini:st.saldoIni}).eq('id',eid);if(error)setSt('Erro ao salvar saldo inicial: '+error.message,'#ff5b5b')}render()};
 document.getElementById('gIni').onchange=e=>{gIni=e.target.value;render()};
 document.getElementById('gFim').onchange=e=>{gFim=e.target.value;render()};
 document.getElementById('gLimpar').onclick=()=>{gIni='';gFim='';v2('gIni','');v2('gFim','');render()};
@@ -1014,6 +1015,8 @@ async function carregarTudo(){
   if(e0)throw e0;
   if(!m||!m.length){setSt('Seu usuário ainda não está vinculado a uma empresa','#ff5b5b');throw new Error('sem empresa')}
   eid=m[0].empresa_id;
+  const {data:emp,error:e00}=await sb.from('empresas').select('saldo_ini').eq('id',eid).maybeSingle();
+  if(!e00&&emp&&emp.saldo_ini!=null)st.saldoIni=+emp.saldo_ini;
   const {data:rows,error:e1}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).limit(10000);
   if(e1)throw e1;
   const {data:cads,error:e2}=await sb.from('cadastros').select('tipo,nome').eq('empresa_id',eid);
@@ -1049,6 +1052,7 @@ async function recarregar(){
     const {data:rows,error}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).limit(10000);
     if(error)throw error;
     if(busy||dirty||falhou){reloadPend=true;return}
+    const {data:emp2}=await sb.from('empresas').select('saldo_ini').eq('id',eid).maybeSingle();if(emp2&&emp2.saldo_ini!=null)st.saldoIni=+emp2.saldo_ini;
     st.lancs=rows.map(toL);snap.clear();st.lancs.forEach(l=>snap.set(l.id,jl(l)));
     st.lancs.forEach(l=>addDesc(l.desc));
     localStorage.setItem(KEY,JSON.stringify(st));
