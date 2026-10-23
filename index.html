@@ -1,4 +1,4 @@
-<!-- VERSION: 54 -->
+<!-- VERSION: 56 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -167,6 +167,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
       <button class="btn p" onclick="abrirGestor('desc')">Gerenciar descrições</button>
       <button class="btn p" onclick="abrirGestor('forn')">Gerenciar fornecedores / clientes</button>
       <button class="btn p" onclick="abrirContas()">Gerenciar contas contábeis</button>
+      <button class="btn p" onclick="abrirRelatorio()">Relatório de totais</button>
     </div>
   </div>
 </main>
@@ -935,6 +936,63 @@ const mm=document.getElementById('matriz');const rh=mm.querySelector('.hojeRow')
 initCols();
 setTimeout(irHoje,0);
 
+function rKey(l,agr){if(agr==='conta')return l.conta||'Não classificado';if(agr==='desc')return (l.desc||'').trim()||'Sem descrição';return (l.cat||'').trim()||'Sem fornecedor / cliente'}
+function abrirRelatorio(){
+  const h=hojeISO(),ano=h.slice(0,4);
+  const ov=document.createElement('div');ov.className='overlay';ov.style.display='flex';
+  ov.innerHTML='<div class="modalbox" style="width:min(900px,100%)">'
+   +'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0;font-size:15px">Relatório de totais</h2><button class="btn" id="rFechar">Fechar</button></div>'
+   +'<div class="acoes" style="margin-top:10px">'
+   +'<label style="flex-direction:row;align-items:center;gap:6px">Agrupar por<select id="rAgr"><option value="conta">Conta contábil</option><option value="desc">Descrição</option><option value="cat">Fornecedor / Cliente</option></select></label>'
+   +'<label style="flex-direction:row;align-items:center;gap:6px">De<input type="date" id="rIni" value="'+ano+'-01-01"></label>'
+   +'<label style="flex-direction:row;align-items:center;gap:6px">Até<input type="date" id="rFim" value="'+ano+'-12-31"></label>'
+   +'<label style="flex-direction:row;align-items:center;gap:6px">Status<select id="rStat"><option value="todos">Realizados e previstos</option><option value="ok">Só realizados</option></select></label>'
+   +'</div>'
+   +'<div class="acoes"><button class="btn" id="rAll">Marcar todos</button><button class="btn" id="rNone">Desmarcar todos</button><span class="mut" style="font-size:12px">Escolha os itens que deseja no relatório:</span></div>'
+   +'<div id="rItens" class="scroll" style="max-height:160px;border:1px solid var(--line);border-radius:6px;padding:8px;display:flex;flex-wrap:wrap;gap:6px 14px"></div>'
+   +'<div class="acoes"><button class="btn p" id="rGerar">Gerar relatório</button><button class="btn" id="rCsv">Exportar CSV</button></div>'
+   +'<div id="rOut" class="scroll" style="max-height:40vh;margin-top:8px"></div>'
+   +'</div>';
+  document.body.appendChild(ov);
+  const $=id=>ov.querySelector('#'+id);
+  const fechar=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)fechar()};
+  $('rFechar').onclick=fechar;
+  let linhas=[];
+  const chaves=()=>[...new Set(st.lancs.map(l=>rKey(l,$('rAgr').value)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const desenha=()=>{const ks=chaves();$('rItens').innerHTML=ks.length?ks.map(k=>'<label class="chk" style="text-transform:none;font-size:13px"><input type="checkbox" class="rChk" value="'+esc(k)+'" checked> '+esc(k)+'</label>').join(''):'<span class="mut">Nenhum lançamento.</span>'};
+  function gerar(){
+    const agr=$('rAgr').value,ini=$('rIni').value,fim=$('rFim').value,stt=$('rStat').value;
+    const sel=new Set([...ov.querySelectorAll('.rChk:checked')].map(c=>c.value));
+    const mp={};
+    st.lancs.forEach(l=>{
+      if(!l.data||l.data<ini||l.data>fim)return;
+      if(stt==='ok'&&l.status!=='ok')return;
+      const k=rKey(l,agr);if(!sel.has(k))return;
+      const m=mp[k]||(mp[k]={k,ent:0,sai:0,n:0});
+      if(l.tipo==='entrada')m.ent+=+l.valor||0;else m.sai+=+l.valor||0;
+      m.n++;
+    });
+    linhas=Object.values(mp).sort((a,b)=>(b.ent+b.sai)-(a.ent+a.sai));
+    const T=linhas.reduce((a,m)=>({ent:a.ent+m.ent,sai:a.sai+m.sai,n:a.n+m.n}),{ent:0,sai:0,n:0});
+    const rot={conta:'Conta contábil',desc:'Descrição',cat:'Fornecedor / Cliente'}[agr];
+    $('rOut').innerHTML=linhas.length?'<table><thead><tr><th>'+rot+'</th><th class="r">Qtd.</th><th class="r">Receitas</th><th class="r">Despesas</th><th class="r">Saldo</th></tr></thead><tbody>'+linhas.map(m=>'<tr><td>'+esc(m.k)+'</td><td class="r">'+m.n+'</td><td class="r rec">'+fmt(m.ent)+'</td><td class="r des">'+fmt(m.sai)+'</td><td class="r"><b>'+fmt(m.ent-m.sai)+'</b></td></tr>').join('')+'<tr style="background:var(--card2)"><td><b>TOTAL</b></td><td class="r"><b>'+T.n+'</b></td><td class="r rec"><b>'+fmt(T.ent)+'</b></td><td class="r des"><b>'+fmt(T.sai)+'</b></td><td class="r"><b>'+fmt(T.ent-T.sai)+'</b></td></tr></tbody></table>':'<p class="vazio">Nenhum lançamento para os filtros escolhidos.</p>';
+  }
+  $('rAgr').onchange=()=>{desenha();gerar()};
+  $('rAll').onclick=()=>{ov.querySelectorAll('.rChk').forEach(c=>c.checked=true);gerar()};
+  $('rNone').onclick=()=>{ov.querySelectorAll('.rChk').forEach(c=>c.checked=false);gerar()};
+  $('rIni').onchange=gerar;$('rFim').onchange=gerar;$('rStat').onchange=gerar;
+  ov.addEventListener('change',e=>{if(e.target.classList&&e.target.classList.contains('rChk'))gerar()});
+  $('rGerar').onclick=gerar;
+  $('rCsv').onclick=()=>{
+    if(!linhas.length)return alert('Gere o relatório antes de exportar.');
+    const f=n=>n.toFixed(2).replace('.',',');
+    const rows=[['item','qtd','receitas','despesas','saldo'],...linhas.map(m=>[m.k,m.n,f(m.ent),f(m.sai),f(m.ent-m.sai)])];
+    const csv='\uFEFF'+rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(';')).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='relatorio.csv';a.click();
+  };
+  desenha();gerar();
+}
 const SUPA_URL='https://tsfrqwtprgzvkdudphfq.supabase.co';
 const SUPA_KEY='sb_publishable_S6aHxBc1t4qc3wAffk4lYA_3Lp3kw8v';
 const sb=window.supabase.createClient(SUPA_URL,SUPA_KEY);
