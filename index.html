@@ -1,4 +1,4 @@
-<!-- VERSION: 58 -->
+<!-- VERSION: 59 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -387,7 +387,7 @@ function ordVal(l,k){
 function ordenar(lista){
   if(!ord.col){lista.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);return lista}
   const k=ord.col,txt=!!ORD_TXT[k],max=txt?4:3;
-  if(ord.n>=max)return lista;
+  if(ord.n>=max){lista.reverse();return lista}
   if(txt&&ord.n===1){const fi=new Map();lista.forEach((l,i)=>{const x=ordVal(l,k);if(!fi.has(x))fi.set(x,i)});lista.sort((a,b)=>fi.get(ordVal(a,k))-fi.get(ordVal(b,k)));return lista}
   const dir=txt?(ord.n===2?1:-1):(ord.n===1?1:-1);
   lista.sort((a,b)=>{const x=ordVal(a,k),y=ordVal(b,k);return x<y?-dir:x>y?dir:0});
@@ -1119,7 +1119,7 @@ async function carregarTudo(){
   if(!m||!m.length){setSt('Seu usuário ainda não está vinculado a uma empresa','#ff5b5b');throw new Error('sem empresa')}
   eid=m[0].empresa_id;
   st.saldoIni=0;
-  const {data:rows,error:e1}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).limit(10000);
+  const {data:rows,error:e1}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).order('criado_em',{ascending:true}).limit(10000);
   if(e1)throw e1;
   const {data:cads,error:e2}=await sb.from('cadastros').select('tipo,nome').eq('empresa_id',eid);
   if(e2)throw e2;
@@ -1151,7 +1151,7 @@ async function recarregar(){
   if(!eid)return;
   if(busy||dirty||falhou){reloadPend=true;return}
   try{
-    const {data:rows,error}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).limit(10000);
+    const {data:rows,error}=await sb.from('lancamentos').select('*').eq('empresa_id',eid).order('criado_em',{ascending:true}).limit(10000);
     if(error)throw error;
     if(busy||dirty||falhou){reloadPend=true;return}
     
