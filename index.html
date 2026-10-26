@@ -1,4 +1,4 @@
-<!-- VERSION: 59 -->
+<!-- VERSION: 60 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -311,7 +311,7 @@ function calcDias(){
 }
 
 function tog(k){colapsado.has(k)?colapsado.delete(k):colapsado.add(k);render()}
-function verDia(d){diaSel=d;modoGrafico=false;editId=null;render();const p=document.getElementById('dirPanel');if(p)p.scrollIntoView({behavior:'smooth',block:'nearest'})}
+function verDia(d){diaSel=d;modoGrafico=false;editId=null;v2('data',d);render();const p=document.getElementById('dirPanel');if(p)p.scrollIntoView({behavior:'smooth',block:'nearest'})}
 function fecharDia(){modoGrafico=true;editId=null;render()}
 
 function renderMatriz(ds){
@@ -781,7 +781,7 @@ function limpar(){
   resetRec();
   ['id','desc','cat','valor'].forEach(x=>v2(x,''));
   document.getElementById('conta').value='';
-  v2('data',hojeISO());
+  v2('data',diaSel||hojeISO());
   document.getElementById('btnSalvar').textContent='Adicionar';
   document.getElementById('btnCancel').style.display='none';
 }
