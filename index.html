@@ -1027,13 +1027,56 @@ function preencherVoz(t){
   const f=[];if(o.tipo)f.push(o.tipo==='entrada'?'receita':'despesa');if(o.valor!=null)f.push(fmt(o.valor));if(o.data)f.push(fmtData(o.data));if(o.cat)f.push(o.cat);if(o.conta)f.push(o.conta);
   setVoz('Preenchi: '+(f.join(' · ')||'nada reconhecido, preencha manualmente')+'. Confira e clique em Adicionar.');
 }
+const NOMES_VOZ={valor:'valor',cat:'fornecedor / cliente',conta:'conta contábil'};
+function faltaVoz(){
+  if(v('valor')===''||+v('valor')<=0&&v('valor')!=='0')return 'valor';
+  if(!v('cat').trim())return 'cat';
+  if(!document.getElementById('conta').value)return 'conta';
+  return null;
+}
+function achaConta(t){
+  const s=NORM(t).trim();if(s.length<2)return null;let best=null;
+  st.contas.forEach(([g,it])=>it.forEach(c=>{const n=NORM(c);if((n.includes(s)||s.includes(n))&&(!best||n.length>NORM(best).length))best=c}));
+  return best;
+}
+function continuarVoz(){
+  const f=faltaVoz();
+  if(!f){setVoz('Tudo preenchido. Confira e clique em Adicionar.');return}
+  setVoz('Agora fale o '+NOMES_VOZ[f]+'…');
+  ouvirCampo(f);
+}
+function ouvirCampo(campo){
+  const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!R)return;
+  const rec=new R();
+  rec.lang='pt-BR';rec.interimResults=false;rec.maxAlternatives=1;
+  rec.onstart=()=>setVoz('Ouvindo '+NOMES_VOZ[campo]+'…');
+  rec.onresult=e=>{
+    const t=e.results[0][0].transcript.trim();
+    if(campo==='valor'){
+      const n=parseFloat(String(numPalavras(NORM(t).split(/\s+/))??t).replace(',','.').replace(/[^\d.]/g,''));
+      if(!(n>0))return setVoz('Não entendi o valor: "'+t+'". Toque em 🎤 e fale de novo.');
+      v2('valor',n);
+    }else if(campo==='cat'){
+      v2('cat',t.replace(/\b\w/g,c=>c.toUpperCase()));
+    }else{
+      const c=achaConta(t);
+      if(!c)return setVoz('Conta não encontrada: "'+t+'". Cadastre com + Nova conta ou toque em 🎤 de novo.');
+      document.getElementById('conta').value=c;
+    }
+    setVoz('Preenchi '+NOMES_VOZ[campo]+': "'+t+'"');
+    continuarVoz();
+  };
+  rec.onerror=e=>setVoz('Erro no microfone: '+e.error+' (verifique a permissão do navegador)');
+  rec.start();
+}
 function falar(){
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!R)return alert('Reconhecimento de voz não disponível neste navegador. Use o Chrome.');
   const rec=new R();
   rec.lang='pt-BR';rec.interimResults=false;rec.maxAlternatives=1;
   rec.onstart=()=>setVoz('Ouvindo… ex.: despesa, mercado Amora, 150 reais, dia 27, conta Alimentação');
-  rec.onresult=e=>{const t=e.results[0][0].transcript;setVoz('Entendi: "'+t+'"');preencherVoz(t)};
+  rec.onresult=e=>{const t=e.results[0][0].transcript;setVoz('Entendi: "'+t+'"');preencherVoz(t);continuarVoz()};
   rec.onerror=e=>setVoz('Erro no microfone: '+e.error+' (verifique a permissão do navegador)');
   rec.start();
 }
