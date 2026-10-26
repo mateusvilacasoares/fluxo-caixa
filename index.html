@@ -1,4 +1,4 @@
-<!-- VERSION: 57 -->
+<!-- VERSION: 58 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -156,7 +156,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
         <button class="btn" onclick="removerDuplicados()">Remover duplicados</button>
         <button class="btn" onclick="resetCols()">Restaurar larguras</button>
       </div>
-      <div class="scroll" id="scrLanc"><table id="tblLanc"><thead><tr><th><input type="checkbox" id="chkAll" onchange="toggleAll(this.checked)"></th><th>Data</th><th>Descrição</th><th>Fornecedor / Cliente</th><th>Tipo</th><th>Status</th><th class="r">Valor</th><th></th></tr></thead><tbody id="lista"></tbody></table></div>
+      <div class="scroll" id="scrLanc"><table id="tblLanc"><thead><tr><th><input type="checkbox" id="chkAll" onchange="toggleAll(this.checked)"></th><th>Data</th><th>Descrição</th><th>Conta</th><th>Fornecedor / Cliente</th><th>Tipo</th><th>Status</th><th class="r">Valor</th><th></th></tr></thead><tbody id="lista"></tbody></table></div>
     </div>
   </div>
 
@@ -372,14 +372,15 @@ function excluirSel(){
   save();render();
 }
 
-const ORD_K={1:'data',2:'desc',3:'cat',4:'tipo',5:'status',6:'valor'};
-const ORD_TXT={desc:1,cat:1,tipo:1,status:1};
+const ORD_K={1:'data',2:'desc',3:'conta',4:'cat',5:'tipo',6:'status',7:'valor'};
+const ORD_TXT={desc:1,conta:1,cat:1,tipo:1,status:1};
 let ord={col:null,n:0};
 function ordVal(l,k){
   if(k==='valor')return +l.valor||0;
   if(k==='data')return l.data;
   if(k==='tipo')return l.tipo==='entrada'?'Receita':'Despesa';
   if(k==='status')return l.status==='ok'?'PAGO':'PREVISTO';
+  if(k==='conta')return (l.conta||'Não classificado').toLowerCase();
   if(k==='desc')return (l.desc||'').toLowerCase();
   return (l.cat||'').toLowerCase();
 }
@@ -417,7 +418,7 @@ function renderLista(){
   const fc=v('fCat'),fs=v('fStatus'),fk=v('fConta');
   const lista=st.lancs.filter(l=>inPer(l.data)).filter(l=>!fc||l.cat===fc).filter(l=>!fs||l.status===fs).filter(l=>!fk||(l.conta||'Não classificado')===fk);
   ordenar(lista);
-  document.getElementById('lista').innerHTML=lista.length?lista.map(l=>`<tr class="${l.data===hojeISO()?'hojeRow':''}"><td><input type="checkbox" class="chkL" value="${l.id}" ${selIds.has(l.id)?'checked':''} onchange="updSel(this)"></td><td>${fmtData(l.data)}</td><td>${esc(l.desc)}<br><small class="mut">${esc(l.conta||'Não classificado')}</small></td><td>${esc(l.cat)}</td><td class="${corLanc(l)}">${l.tipo==='entrada'?'Receita':'Despesa'}</td><td class="${corLanc(l)}">${l.status==='ok'?'PAGO':'PREVISTO'}</td><td class="r ${corLanc(l)}">${fmt(l.valor)}</td><td><button class="e" onclick="editar('${l.id}')">editar</button> ${botoesPrev(l)}<button class="d" onclick="excluir('${l.id}')">excluir</button></td></tr>`).join(''):'<tr><td colspan="8" class="vazio">Nenhum lançamento</td></tr>';
+  document.getElementById('lista').innerHTML=lista.length?lista.map(l=>`<tr class="${l.data===hojeISO()?'hojeRow':''}"><td><input type="checkbox" class="chkL" value="${l.id}" ${selIds.has(l.id)?'checked':''} onchange="updSel(this)"></td><td>${fmtData(l.data)}</td><td>${esc(l.desc)}</td><td>${esc(l.conta||'Não classificado')}</td><td>${esc(l.cat)}</td><td class="${corLanc(l)}">${l.tipo==='entrada'?'Receita':'Despesa'}</td><td class="${corLanc(l)}">${l.status==='ok'?'PAGO':'PREVISTO'}</td><td class="r ${corLanc(l)}">${fmt(l.valor)}</td><td><button class="e" onclick="editar('${l.id}')">editar</button> ${botoesPrev(l)}<button class="d" onclick="excluir('${l.id}')">excluir</button></td></tr>`).join(''):'<tr><td colspan="9" class="vazio">Nenhum lançamento</td></tr>';
 }
 
 function rotRec(l){const d=(l.desc||'').toLowerCase();if(d.includes('atacado'))return 'Vendas atacado';if(d.includes('online'))return 'Vendas online';return (l.desc||'').trim()||'Outras receitas'}
@@ -900,7 +901,7 @@ function resetCols(){localStorage.removeItem(KEY+'_cols2');location.reload()}
 function initCols(){
   const t=document.getElementById('tblLanc');if(!t)return;
   const ths=[...t.querySelectorAll('thead th')];
-  const DEF=[26,70,90,95,66,74,90,84];
+  const DEF=[26,70,90,95,95,66,74,90,84];
   let saved=null;try{saved=JSON.parse(localStorage.getItem(KEY+'_cols2')||'null')}catch(e){saved=null}
   ths.forEach((th,i)=>{th.style.width=(saved&&saved[i]?saved[i]:DEF[i]||80)+'px'});
   t.style.tableLayout='fixed';
