@@ -1,4 +1,4 @@
-<!-- VERSION: 60 -->
+<!-- VERSION: 62 -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -555,7 +555,7 @@ const relOrd={col:null,n:0};
 function ordenarCom(lista,o){
   if(!o.col)return lista;
   const k=o.col,txt=!!ORD_TXT[k],max=txt?4:3;
-  if(o.n>=max)return lista;
+  if(o.n>=max)return lista.reverse();
   if(txt&&o.n===1){const fi=new Map();lista.forEach((l,i)=>{const x=ordVal(l,k);if(!fi.has(x))fi.set(x,i)});return lista.sort((a,b)=>fi.get(ordVal(a,k))-fi.get(ordVal(b,k)))}
   const dir=txt?(o.n===2?1:-1):(o.n===1?1:-1);
   return lista.sort((a,b)=>{const x=ordVal(a,k),y=ordVal(b,k);return x<y?-dir:x>y?dir:0});
@@ -600,11 +600,12 @@ function renderDia(ds){
   svg.style.display='none';rel.style.display='';
   tit.textContent='Lançamentos de '+fmtData(diaSel)+' · '+diaSem(diaSel);
   const x=ds.find(d=>d.data===diaSel)||{ent:0,sai:0,acum:0};
+  const sReal=+st.saldoIni+validos().filter(l=>l.data<=diaSel&&l.status==='ok').reduce((a,l)=>a+(l.tipo==='entrada'?1:-1)*(+l.valor||0),0);
   const ls=ordenarCom(st.lancs.filter(l=>l.data===diaSel),relOrd);
   rel.innerHTML=`<div class="rel-kpis">
       <div class="kpi k-rec"><small>Receitas</small><b class="rec">${fmt(x.ent)}</b></div>
       <div class="kpi k-des"><small>Despesas</small><b class="des">${fmt(x.sai)}</b></div>
-      <div class="kpi k-ok"><small>Saldo do dia</small><b>${fmt(x.acum)}</b></div></div>
+      <div class="kpi k-ok"><small>Saldo do dia (realizado)</small><b>${fmt(sReal)}</b></div><div class="kpi"><small>Saldo previsto</small><b>${fmt(x.acum)}</b></div></div>
     <div class="acoes"><button class="btn" onclick="fecharDia()">Voltar ao gráfico</button></div>
     <div class="rel-wrap"><table class="rel-table"><thead><tr><th style="cursor:pointer" title="Clique para agrupar / ordenar" onclick="relSortBy('desc')">Descrição ${relInd('desc')}</th><th style="cursor:pointer" title="Clique para agrupar / ordenar" onclick="relSortBy('cat')">Fornecedor / Cliente ${relInd('cat')}</th><th style="cursor:pointer" title="Clique para agrupar / ordenar" onclick="relSortBy('tipo')">Tipo ${relInd('tipo')}</th><th style="cursor:pointer" title="Clique para agrupar / ordenar" onclick="relSortBy('status')">Status ${relInd('status')}</th><th class="r" style="cursor:pointer" title="Clique para ordenar" onclick="relSortBy('valor')">Valor ${relInd('valor')}</th><th></th></tr></thead>
     <tbody>${ls.map(l=>l.id===editId?linhaEdit(l):linhaView(l)).join('')}</tbody></table></div>
