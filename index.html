@@ -68,6 +68,8 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
 .prv-rec{color:#f5d000;font-weight:600}
 .prv-des{color:#ff8c1a;font-weight:600}
 .panel.fixo{position:sticky;top:0;z-index:30;max-height:70vh;overflow:auto;box-shadow:0 8px 22px rgba(0,0,0,.5)}
+.conferido td{background:rgba(47,191,113,.28)!important}
+.chkC{width:16px;height:16px;cursor:pointer;vertical-align:middle;margin-right:4px}
 </style></head>
 <body>
 <div id="erro" style="display:none;background:#5a1d1d;color:#fff;padding:10px 24px;font-size:13px"></div>
@@ -168,6 +170,8 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
       <button class="btn p" onclick="abrirGestor('forn')">Gerenciar fornecedores / clientes</button>
       <button class="btn p" onclick="abrirContas()">Gerenciar contas contábeis</button>
       <button class="btn p" onclick="abrirRelatorio()">Relatório de totais</button>
+      <button class="btn p" onclick="abrirExtrato()">Extrato para impressão</button>
+      <button class="btn p" onclick="abrirConciliacao()">Conferir extrato bancário (CSV)</button>
     </div>
   </div>
 </main>
@@ -418,7 +422,7 @@ function renderLista(){
   const fc=v('fCat'),fs=v('fStatus'),fk=v('fConta');
   const lista=st.lancs.filter(l=>inPer(l.data)).filter(l=>!fc||l.cat===fc).filter(l=>!fs||l.status===fs).filter(l=>!fk||(l.conta||'Não classificado')===fk);
   ordenar(lista);
-  document.getElementById('lista').innerHTML=lista.length?lista.map(l=>`<tr class="${l.data===hojeISO()?'hojeRow':''}"><td><input type="checkbox" class="chkL" value="${l.id}" ${selIds.has(l.id)?'checked':''} onchange="updSel(this)"></td><td>${fmtData(l.data)}</td><td>${esc(l.desc)}</td><td>${esc(l.conta||'Não classificado')}</td><td>${esc(l.cat)}</td><td class="${corLanc(l)}">${l.tipo==='entrada'?'Receita':'Despesa'}</td><td class="${corLanc(l)}">${l.status==='ok'?'PAGO':'PREVISTO'}</td><td class="r ${corLanc(l)}">${fmt(l.valor)}</td><td><button class="e" onclick="editar('${l.id}')">editar</button> ${botoesPrev(l)}<button class="d" onclick="excluir('${l.id}')">excluir</button></td></tr>`).join(''):'<tr><td colspan="9" class="vazio">Nenhum lançamento</td></tr>';
+  document.getElementById('lista').innerHTML=lista.length?lista.map(l=>`<tr class="${l.data===hojeISO()?'hojeRow':''}${l.conf?' conferido':''}"><td><input type="checkbox" class="chkL" value="${l.id}" ${selIds.has(l.id)?'checked':''} onchange="updSel(this)"></td><td>${fmtData(l.data)}</td><td>${esc(l.desc)}</td><td>${esc(l.conta||'Não classificado')}</td><td>${esc(l.cat)}</td><td class="${corLanc(l)}">${l.tipo==='entrada'?'Receita':'Despesa'}</td><td class="${corLanc(l)}">${l.status==='ok'?'PAGO':'PREVISTO'}</td><td class="r ${corLanc(l)}">${fmt(l.valor)}</td><td><input type="checkbox" class="chkC" title="Conferido com o extrato do banco" ${l.conf?'checked':''} onchange="toggleConf('${l.id}',this.checked)"><button class="e" onclick="editar('${l.id}')">editar</button> ${botoesPrev(l)}<button class="d" onclick="excluir('${l.id}')">excluir</button></td></tr>`).join(''):'<tr><td colspan="9" class="vazio">Nenhum lançamento</td></tr>';
 }
 
 function rotRec(l){const d=(l.desc||'').toLowerCase();if(d.includes('atacado'))return 'Vendas atacado';if(d.includes('online'))return 'Vendas online';return (l.desc||'').trim()||'Outras receitas'}
@@ -624,6 +628,10 @@ function salvarInline(id){
   addDesc(desc);editId=null;save();render();
 }
 
+function toggleConf(id,on){
+  const l=st.lancs.find(x=>x.id===id);if(!l)return;
+  l.conf=!!on;save();render();
+}
 function excluir(id){
   if(!confirm('Excluir este lançamento?'))return;
   st.lancs=st.lancs.filter(l=>l.id!==id);
@@ -995,6 +1003,184 @@ function abrirRelatorio(){
   };
   desenha();gerar();
 }
+function abrirExtrato(){
+  const h=hojeISO(),ini0=h.slice(0,8)+'01';
+  const COLS=[['data','Data'],['desc','Descrição'],['conta','Conta contábil'],['cat','Fornecedor / Cliente'],['tipo','Tipo'],['status','Status'],['valor','Valor']];
+  const ov=document.createElement('div');ov.className='overlay';ov.style.display='flex';
+  ov.innerHTML='<div class="modalbox" style="width:min(640px,100%)">'
+   +'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0;font-size:15px">Extrato para impressão</h2><button class="btn" id="xFechar">Fechar</button></div>'
+   +'<div class="acoes" style="margin-top:10px"><label style="flex-direction:row;align-items:center;gap:6px">De<input type="date" id="xIni" value="'+ini0+'"></label><label style="flex-direction:row;align-items:center;gap:6px">Até<input type="date" id="xFim" value="'+h+'"></label></div>'
+   +'<div class="acoes"><label style="flex-direction:row;align-items:center;gap:6px">Mostrar<select id="xTipo"><option value="ambos">Receitas e despesas</option><option value="entrada">Só receitas</option><option value="saida">Só despesas</option></select></label><label style="flex-direction:row;align-items:center;gap:6px">Status<select id="xStat"><option value="todos">Realizados e previstos</option><option value="ok">Só realizados</option><option value="prev">Só previstos</option></select></label></div>'
+   +'<p class="mut" style="margin:8px 0 4px;font-size:12px">Informações que aparecem no extrato:</p>'
+   +'<div class="chks">'+COLS.map(([k,n])=>'<label class="chk"><input type="checkbox" class="xCol" value="'+k+'" checked> '+n+'</label>').join('')+'<label class="chk"><input type="checkbox" id="xSaldo" checked> Saldo acumulado</label></div>'
+   +'<div class="acoes" style="margin-top:12px"><button class="btn p" id="xImp">Imprimir extrato</button></div>'
+   +'</div>';
+  document.body.appendChild(ov);
+  const $=id=>ov.querySelector('#'+id);
+  $('xFechar').onclick=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  $('xImp').onclick=()=>{
+    const ini=$('xIni').value,fim=$('xFim').value;
+    if(!ini||!fim||ini>fim)return alert('Informe um período válido.');
+    const cols=[...ov.querySelectorAll('.xCol:checked')].map(c=>c.value);
+    if(!cols.length)return alert('Escolha ao menos uma informação.');
+    const tp=$('xTipo').value,stt=$('xStat').value,comSaldo=$('xSaldo').checked;
+    let saldo=+st.saldoIni+st.lancs.filter(l=>l.data<ini).reduce((a,l)=>a+(l.tipo==='entrada'?1:-1)*(+l.valor||0),0);
+    const L=st.lancs.filter(l=>l.data>=ini&&l.data<=fim&&(tp==='ambos'||l.tipo===tp)&&(stt==='todos'||l.status===stt))
+      .sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:(a.desc||'').localeCompare(b.desc||'','pt-BR'));
+    let tr=0,td=0;
+    const head=cols.map(k=>'<th'+(k==='valor'?' class="r"':'')+'>'+COLS.find(c=>c[0]===k)[1]+'</th>').join('')+(comSaldo?'<th class="r">Saldo acumulado</th>':'');
+    let rows='';
+    L.forEach(l=>{
+      saldo+=(l.tipo==='entrada'?1:-1)*(+l.valor||0);
+      if(l.tipo==='entrada')tr+=+l.valor||0;else td+=+l.valor||0;
+      const cel={data:fmtData(l.data),desc:esc(l.desc),conta:esc(l.conta||'Não classificado'),cat:esc(l.cat),tipo:l.tipo==='entrada'?'Receita':'Despesa',status:l.status==='ok'?'Realizado':'Previsto',valor:fmt(l.valor)};
+      rows+='<tr>'+cols.map(k=>'<td'+(k==='valor'?' class="r"':'')+'>'+cel[k]+'</td>').join('')+(comSaldo?'<td class="r">'+fmt(saldo)+'</td>':'')+'</tr>';
+    });
+    const titulo='Extrato de '+fmtData(ini)+' a '+fmtData(fim);
+    const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+titulo+'</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:20px;color:#000}h1{font-size:16px;margin:0 0 4px}p{margin:2px 0 10px;color:#444}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #999;padding:4px 5px;text-align:left}th{background:#eee;font-size:10px;text-transform:uppercase}td.r,th.r{text-align:right}.tot{margin-top:12px;font-weight:bold;color:#000}@media print{body{margin:10mm}}</style></head><body><h1>Extrato</h1><p>'+titulo+' · emitido em '+fmtData(hojeISO())+'</p><table><thead><tr>'+head+'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+(cols.length+(comSaldo?1:0))+'">Nenhum lançamento no período.</td></tr>')+'</tbody></table><p class="tot">Receitas: '+fmt(tr)+' &nbsp;|&nbsp; Despesas: '+fmt(td)+' &nbsp;|&nbsp; Resultado: '+fmt(tr-td)+'</p></body></html>';
+    const w=window.open('','_blank');
+    if(!w)return alert('O navegador bloqueou a janela. Permita pop-ups deste site.');
+    w.document.open();w.document.write(html);w.document.close();
+    setTimeout(()=>w.print(),300);
+  };
+}
+function abrirConciliacao(){
+  const ov=document.createElement('div');ov.className='overlay';ov.style.display='flex';
+  ov.innerHTML=`<div class="modalbox" style="width:min(1000px,100%)">
+    <div class="acoes" style="justify-content:space-between"><h2 style="margin:0;font-size:16px">Conferência do extrato bancário</h2><button class="btn" id="bcFechar">Fechar</button></div>
+    <p class="mut">Esta tela não importa lançamentos nem altera valores. Primeiro confira a prévia; somente depois confirme as marcações verdes. Use um extrato da conta bancária correspondente aos lançamentos do sistema.</p>
+    <label>Extrato do banco em CSV<input type="file" id="bcArquivo" accept=".csv,text/csv"></label>
+    <div class="acoes"><label>De<input type="date" id="bcIni" value="${diaSel||hojeISO()}"></label><label>Até<input type="date" id="bcFim" value="${diaSel||hojeISO()}"></label></div>
+    <div id="bcMap" style="display:none">
+      <div class="acoes"><label>Coluna da data<select id="bcData"></select></label><label>Coluna do valor<select id="bcValor"></select></label><label>Coluna da descrição<select id="bcDesc"></select></label><label>Coluna do tipo (opcional)<select id="bcTipo"></select></label></div>
+      <div class="acoes"><label>Formato dos valores<select id="bcDecimal"><option value=",">Vírgula decimal: 1.234,56</option><option value=".">Ponto decimal: 1234.56</option></select></label><label>Identificação de receita/despesa<select id="bcModo"><option value="sinal">Pelo sinal: positivo = receita; negativo = despesa</option><option value="coluna">Pela coluna de tipo (crédito/débito)</option></select></label></div>
+      <p class="mut">Confira as colunas e os valores apresentados. Cabeçalho e separador são detectados automaticamente. Arquivos com colunas separadas de crédito e débito precisam ser convertidos para uma única coluna de valor.</p>
+      <div class="acoes"><button class="btn p" id="bcPrevia">Analisar e mostrar prévia</button><button class="btn p" id="bcAplicar" disabled>Confirmar conferência</button></div>
+    </div>
+    <div id="bcMsg" role="status" style="margin:8px 0;white-space:pre-wrap"></div>
+    <div id="bcOut" class="scroll" style="max-height:45vh"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const $=id=>ov.querySelector('#'+id),fechar=()=>ov.remove();
+  $('bcFechar').onclick=fechar;ov.onclick=e=>{if(e.target===ov)fechar()};
+  let linhas=[],cab=[],plano=[],assinatura='',aplicado=false;
+  const n=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const assinaturaAtual=()=>JSON.stringify(st.lancs.map(l=>[l.id,l.data,l.tipo,l.valor,l.status,!!l.conf]));
+  function invalidar(){plano=[];assinatura='';$('bcAplicar').disabled=true;$('bcOut').innerHTML='';$('bcMsg').textContent='Gere uma nova prévia para conferir os filtros e as colunas.'}
+  function parseCSV(texto,sep){
+    const rows=[];let row=[],cell='',quoted=false;
+    for(let i=0;i<texto.length;i++){
+      const c=texto[i];
+      if(c==='"'){if(quoted&&texto[i+1]==='"'){cell+='"';i++}else quoted=!quoted}
+      else if(c===sep&&!quoted){row.push(cell);cell=''}
+      else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&texto[i+1]==='\n')i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell=''}
+      else cell+=c;
+    }
+    if(quoted)throw new Error('Há aspas sem fechamento no CSV. Exporte novamente pelo banco.');
+    row.push(cell);if(row.some(x=>x.trim()))rows.push(row);return rows;
+  }
+  function dataBanco(s){
+    s=String(s||'').trim();let m=s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})(?:\s.*)?$/);
+    let d=m?m[3]+'-'+m[2]+'-'+m[1]:normData(s);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return null;
+    const dt=new Date(d+'T12:00:00');return !isNaN(dt)&&iso(dt)===d?d:null;
+  }
+  function dinheiro(s){
+    s=String(s||'').trim();if(!s)return null;
+    const negativo=/^-|\(|-\s*$/.test(s);
+    s=s.replace(/R\$/gi,'').replace(/[\s()]/g,'').replace(/^-|\+|\-$/g,'');
+    const decimal=$('bcDecimal').value;
+    const pad=decimal===','?/^(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/:/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/;
+    if(!pad.test(s))return null;
+    s=decimal===','?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+    const cents=Math.round(Number(s)*100);return Number.isSafeInteger(cents)?(negativo?-cents:cents):null;
+  }
+  function tipoBanco(s){
+    s=n(s);if(/^(c|cr|credito|credit|entrada|receita|recebimento|creditado)$/.test(s))return 'entrada';
+    if(/^(d|db|debito|debit|saida|despesa|pagamento|debitado)$/.test(s))return 'saida';return null;
+  }
+  const chave=x=>[x.data,x.tipo,Math.abs(x.cents)].join('|');
+  $('bcArquivo').onchange=async e=>{
+    invalidar();linhas=[];$('bcMap').style.display='none';
+    try{
+      const file=e.target.files[0];if(!file)return;
+      const bytes=await file.arrayBuffer();let texto=new TextDecoder('utf-8').decode(bytes);
+      if(texto.includes('\uFFFD'))texto=new TextDecoder('windows-1252').decode(bytes);
+      texto=texto.replace(/^\uFEFF/,'');
+      let melhor=null;
+      for(const sep of [';',',','\t']){
+        const rows=parseCSV(texto,sep);
+        for(let i=0;i<Math.min(rows.length,40);i++){
+          const hs=rows[i].map(n),temData=hs.some(x=>/^(data|date)(\b|_)/.test(x)),temValor=hs.some(x=>/valor|value|amount/.test(x)&&!/saldo/.test(x));
+          if(temData&&temValor&&(!melhor||rows[i].length>melhor.cab.length))melhor={cab:rows[i],rows:rows.slice(i+1)};
+        }
+      }
+      if(!melhor)throw new Error('Não identifiquei o cabeçalho com Data e Valor. O CSV deve ter uma coluna de data e uma de valor por movimentação.');
+      cab=melhor.cab;linhas=melhor.rows;
+      const opts=cab.map((c,i)=>`<option value="${i}">${esc(c||'Coluna '+(i+1))}</option>`).join('');
+      for(const id of ['bcData','bcValor','bcDesc','bcTipo'])$(id).innerHTML='<option value="">Não selecionar</option>'+opts;
+      const achar=fn=>{const i=cab.findIndex(c=>fn(n(c)));return i<0?'':String(i)};
+      $('bcData').value=achar(x=>/^(data|date)(\b|_)/.test(x));
+      $('bcValor').value=achar(x=>/valor|value|amount/.test(x)&&!/saldo/.test(x));
+      $('bcDesc').value=achar(x=>/descri|historico|memo/.test(x));
+      $('bcTipo').value=achar(x=>/^(tipo|natureza|credito.?debito|c.?d)$/.test(x));
+      $('bcMap').style.display='';
+      $('bcMsg').textContent=`Arquivo lido: ${linhas.length} linha(s) após o cabeçalho. Escolha o período e confirme o formato decimal antes de analisar.`;
+    }catch(err){$('bcMsg').textContent='Não foi possível ler: '+err.message}
+  };
+  for(const id of ['bcIni','bcFim','bcData','bcValor','bcDesc','bcTipo','bcModo','bcDecimal'])$(id).onchange=invalidar;
+  $('bcPrevia').onclick=()=>{
+    invalidar();aplicado=false;
+    const ini=$('bcIni').value,fim=$('bcFim').value,di=$('bcData').value,vi=$('bcValor').value,ti=$('bcTipo').value,ds=$('bcDesc').value;
+    if(!ini||!fim||ini>fim){$('bcMsg').textContent='Informe um período válido.';return}
+    if(di===''||vi===''||di===vi){$('bcMsg').textContent='Selecione colunas diferentes para Data e Valor.';return}
+    if($('bcModo').value==='coluna'&&ti===''){$('bcMsg').textContent='Selecione a coluna que identifica crédito ou débito.';return}
+    const banco=[],problemas=[];let fora=0,semData=0;
+    linhas.forEach((r,i)=>{
+      const data=dataBanco(r[+di]);if(!data){semData++;return}
+      if(data<ini||data>fim){fora++;return}
+      const cents=dinheiro(r[+vi]),tipo=$('bcModo').value==='coluna'?tipoBanco(r[+ti]):(cents===null||cents===0?null:cents>0?'entrada':'saida');
+      const desc=ds===''?'':r[+ds]||'';
+      if(cents===null||cents===0||!tipo){problemas.push({data,desc,valor:r[+vi]||'',situacao:'Valor zero/inválido ou tipo não reconhecido — revisar'});return}
+      banco.push({data,cents:Math.abs(cents),tipo,desc,linha:i});
+    });
+    const sistema=st.lancs.filter(l=>l.data>=ini&&l.data<=fim&&l.status==='ok');
+    const bm=new Map(),sm=new Map();
+    banco.forEach(b=>{const k=chave(b);if(!bm.has(k))bm.set(k,[]);bm.get(k).push(b)});
+    sistema.forEach(l=>{const k=chave({data:l.data,tipo:l.tipo,cents:Math.round(Number(l.valor)*100)});if(!sm.has(k))sm.set(k,[]);sm.get(k).push(l)});
+    const rows=[],candidatos=new Set();let repetidos=0,semPar=0,ja=0;
+    bm.forEach((bs,k)=>{
+      const ls=sm.get(k)||[];
+      bs.forEach(b=>{
+        let situacao;
+        if(bs.length===1&&ls.length===1){
+          const l=ls[0];candidatos.add(l.id);
+          if(l.conf){situacao='Já conferido — manter';ja++}
+          else{situacao='Correspondência única — pronto para confirmar';plano.push(l.id)}
+        }else if(!ls.length){situacao='Sem lançamento realizado correspondente — revisar';semPar++}
+        else{situacao='Ambíguo: '+bs.length+' no banco / '+ls.length+' no sistema — revisar manualmente';repetidos++}
+        rows.push({b,ls,situacao});
+      });
+    });
+    assinatura=assinaturaAtual();
+    const previstos=st.lancs.filter(l=>l.data>=ini&&l.data<=fim&&l.status!=='ok').length;
+    const nao=sistema.filter(l=>!candidatos.has(l.id));
+    $('bcMsg').textContent=`${banco.length} movimentação(ões) bancária(s) válida(s) no período. ${plano.length} nova(s) marcação(ões) sugerida(s); ${ja} já conferida(s); ${repetidos} ambígua(s); ${semPar} sem correspondência.\n${problemas.length} linha(s) com valor/tipo inválido; ${semData} sem data válida; ${fora} fora do período. ${previstos} previsto(s) não foram conciliados.\nNenhuma marcação foi alterada. Confira abaixo data, tipo e valor. Descrições não são critério de correspondência. Lançamentos divididos (ex.: 12,00 + 74,66 = 86,66) não são somados automaticamente.`;
+    $('bcOut').innerHTML='<table><thead><tr><th>Data</th><th>Banco / descrição</th><th>Tipo</th><th class="r">Valor</th><th>No sistema</th><th>Resultado</th></tr></thead><tbody>'+rows.map(({b,ls,situacao})=>'<tr><td>'+fmtData(b.data)+'</td><td>'+esc(b.desc)+'</td><td>'+(b.tipo==='entrada'?'Receita':'Despesa')+'</td><td class="r">'+fmt(b.cents/100)+'</td><td>'+ls.map(l=>esc(l.cat)+' — '+esc(l.desc)).join('<br>')+'</td><td>'+esc(situacao)+'</td></tr>').join('')+problemas.map(p=>'<tr><td>'+fmtData(p.data)+'</td><td>'+esc(p.desc)+'</td><td>Revisar</td><td>'+esc(p.valor)+'</td><td></td><td>'+esc(p.situacao)+'</td></tr>').join('')+'</tbody></table><h3 style="font-size:14px">Lançamentos do sistema sem correspondência única nesta análise</h3><p class="mut">Não significa que estejam errados. Marcações anteriores são preservadas.</p><table><thead><tr><th>Data</th><th>Fornecedor / Cliente</th><th>Descrição</th><th>Tipo</th><th>Valor</th></tr></thead><tbody>'+nao.map(l=>'<tr><td>'+fmtData(l.data)+'</td><td>'+esc(l.cat)+'</td><td>'+esc(l.desc)+'</td><td>'+(l.tipo==='entrada'?'Receita':'Despesa')+'</td><td>'+fmt(l.valor)+'</td></tr>').join('')+'</tbody></table>';
+    $('bcAplicar').disabled=!plano.length;
+    $('bcAplicar').textContent='Confirmar '+plano.length+' conferência(s)';
+  };
+  $('bcAplicar').onclick=()=>{
+    if(aplicado||!plano.length)return;
+    if(assinatura!==assinaturaAtual()){invalidar();$('bcMsg').textContent='Os lançamentos mudaram desde a prévia. Analise novamente antes de confirmar.';return}
+    if(!confirm('Marcar '+plano.length+' lançamento(s) como conferido(s)? Confira se este extrato é da conta bancária correta. Valores e datas não serão alterados.'))return;
+    const ids=new Set(plano);let total=0;
+    st.lancs.forEach(l=>{if(ids.has(l.id)&&!l.conf){l.conf=true;total++}});
+    aplicado=true;$('bcAplicar').disabled=true;save();render();
+    $('bcMsg').textContent=total+' lançamento(s) marcado(s) de verde e salvo(s) neste aparelho. Confira no topo do painel se a sincronização com a nuvem foi concluída. Os demais lançamentos e as marcações anteriores foram mantidos.';
+  };
+}
 const NORM=s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const PAL={zero:0,um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,dezesseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30,quarenta:40,cinquenta:50,sessenta:60,setenta:70,oitenta:80,noventa:90,cem:100,cento:100,duzentos:200,duzentas:200,trezentos:300,trezentas:300,quatrocentos:400,quatrocentas:400,quinhentos:500,quinhentas:500,seiscentos:600,seiscentas:600,setecentos:700,setecentas:700,oitocentos:800,oitocentas:800,novecentos:900,novecentas:900,mil:1000};
 function numPalavras(ws){let tot=0,at=0,ach=false;for(const w of ws){if(w==='e')continue;const n=PAL[w];if(n===undefined){if(ach)break;continue}ach=true;if(n===1000){tot+=(at||1)*1000;at=0}else at+=n}return ach?tot+at:null}
@@ -1089,10 +1275,10 @@ let eid=null,uid=null,rt=null,busy=false,dirty=false,reloadPend=false,lastCad=''
 const isUUID=s=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s));
 const novoId=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16)});
 const snap=new Map();
-const jl=l=>JSON.stringify([l.data,l.tipo,l.cat,l.desc,+l.valor||0,l.status,l.conta||'',l.grupo||'']);
+const jl=l=>JSON.stringify([l.data,l.tipo,l.cat,l.desc,+l.valor||0,l.status,l.conta||'',l.grupo||'',!!l.conf]);
 const hora=()=>new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 function setSt(t,c){const e=document.getElementById('syncSt');if(e){e.textContent=t;e.style.color=c||'#9b9ba7'}}
-function toL(r){return {id:String(r.id),data:String(r.data).slice(0,10),tipo:r.tipo,cat:r.fornecedor||'',desc:r.descricao||'',conta:r.conta||'',valor:+r.valor||0,status:r.status,grupo:r.grupo||'',_cb:r.criado_por||null}}
+function toL(r){return {id:String(r.id),data:String(r.data).slice(0,10),tipo:r.tipo,cat:r.fornecedor||'',desc:r.descricao||'',conta:r.conta||'',valor:+r.valor||0,status:r.status,grupo:r.grupo||'',_cb:r.criado_por||null,conf:!!r.conferido}}
 function cadAtual(){
   const cad=[];
   st.descs.forEach(d=>cad.push({tipo:'desc',nome:d}));
@@ -1117,7 +1303,7 @@ async function syncNow(){
     const dels=[...snap.keys()].filter(id=>!ids.has(id));
     for(let i=0;i<ups.length;i+=200){
       const lote=ups.slice(i,i+200);
-      const rows=lote.map(({l})=>({id:String(l.id),empresa_id:eid,data:l.data,tipo:l.tipo,fornecedor:l.cat||'',descricao:l.desc||'',conta:l.conta||null,valor:+l.valor||0,status:l.status==='prev'?'prev':'ok',grupo:l.grupo||null,criado_por:l._cb||uid,alterado_por:uid,alterado_em:new Date().toISOString()}));
+      const rows=lote.map(({l})=>({id:String(l.id),empresa_id:eid,data:l.data,tipo:l.tipo,fornecedor:l.cat||'',descricao:l.desc||'',conta:l.conta||null,valor:+l.valor||0,status:l.status==='prev'?'prev':'ok',grupo:l.grupo||null,conferido:!!l.conf,criado_por:l._cb||uid,alterado_por:uid,alterado_em:new Date().toISOString()}));
       const {error}=await sb.from('lancamentos').upsert(rows,{onConflict:'id'});
       if(error)throw error;
       lote.forEach(({l,j})=>{snap.set(String(l.id),j);if(!l._cb)l._cb=uid});
