@@ -628,9 +628,25 @@ function salvarInline(id){
   addDesc(desc);editId=null;save();render();
 }
 
+// Marcações ainda não confirmadas pela nuvem sobrevivem ao fechamento do navegador.
+// A chave por empresa evita misturar conferências de empresas diferentes.
+function chaveConfPendente(){return KEY+'_conf_pendente_'+(eid||'local')}
+function lerConfPendente(){
+  try{return JSON.parse(localStorage.getItem(chaveConfPendente())||'{}')||{}}catch(e){return {}}
+}
+function registrarConfPendente(id,on){
+  const p=lerConfPendente();p[String(id)]=!!on;
+  localStorage.setItem(chaveConfPendente(),JSON.stringify(p));
+}
+function confirmarConfPendente(id,on){
+  const p=lerConfPendente(),k=String(id);
+  if(Object.prototype.hasOwnProperty.call(p,k)&&p[k]===!!on){
+    delete p[k];localStorage.setItem(chaveConfPendente(),JSON.stringify(p));
+  }
+}
 function toggleConf(id,on){
   const l=st.lancs.find(x=>x.id===id);if(!l)return;
-  l.conf=!!on;save();render();
+  l.conf=!!on;registrarConfPendente(l.id,l.conf);save();render();
 }
 function excluir(id){
   if(!confirm('Excluir este lançamento?'))return;
@@ -803,7 +819,7 @@ document.getElementById('form').onsubmit=function(ev){
   if(!l.conta)return alert('Selecione a conta contábil (DRE).');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(l.data))return alert('Informe a data.');
   const i=st.lancs.findIndex(x=>x.id===id);
-  if(i<0)st.lancs.push(l);else st.lancs[i]=l;
+  if(i<0)st.lancs.push(l);else st.lancs[i]=Object.assign({},st.lancs[i],l); // Preserva conferência e metadados ao editar.
   addDesc(l.desc);save();limpar();render();
   document.getElementById('cat').focus();
 };
@@ -1176,7 +1192,7 @@ function abrirConciliacao(){
     if(assinatura!==assinaturaAtual()){invalidar();$('bcMsg').textContent='Os lançamentos mudaram desde a prévia. Analise novamente antes de confirmar.';return}
     if(!confirm('Marcar '+plano.length+' lançamento(s) como conferido(s)? Confira se este extrato é da conta bancária correta. Valores e datas não serão alterados.'))return;
     const ids=new Set(plano);let total=0;
-    st.lancs.forEach(l=>{if(ids.has(l.id)&&!l.conf){l.conf=true;total++}});
+    st.lancs.forEach(l=>{if(ids.has(l.id)&&!l.conf){l.conf=true;registrarConfPendente(l.id,true);total++}});
     aplicado=true;$('bcAplicar').disabled=true;save();render();
     $('bcMsg').textContent=total+' lançamento(s) marcado(s) de verde e salvo(s) neste aparelho. Confira no topo do painel se a sincronização com a nuvem foi concluída. Os demais lançamentos e as marcações anteriores foram mantidos.';
   };
@@ -1278,7 +1294,16 @@ const snap=new Map();
 const jl=l=>JSON.stringify([l.data,l.tipo,l.cat,l.desc,+l.valor||0,l.status,l.conta||'',l.grupo||'',!!l.conf]);
 const hora=()=>new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 function setSt(t,c){const e=document.getElementById('syncSt');if(e){e.textContent=t;e.style.color=c||'#9b9ba7'}}
-function toL(r){return {id:String(r.id),data:String(r.data).slice(0,10),tipo:r.tipo,cat:r.fornecedor||'',desc:r.descricao||'',conta:r.conta||'',valor:+r.valor||0,status:r.status,grupo:r.grupo||'',_cb:r.criado_por||null,conf:!!r.conferido}}
+function toL(r){
+  const p=lerConfPendente(),id=String(r.id);
+  const conf=Object.prototype.hasOwnProperty.call(p,id)?!!p[id]:!!r.conferido;
+  return {id,data:String(r.data).slice(0,10),tipo:r.tipo,cat:r.fornecedor||'',desc:r.descricao||'',conta:r.conta||'',valor:+r.valor||0,status:r.status,grupo:r.grupo||'',_cb:r.criado_por||null,conf};
+}
+function snapshotNuvem(r){
+  // O snapshot reflete a nuvem, não a sobreposição local. Assim uma marcação
+  // pendente continua sendo enviada depois de reabrir o programa.
+  return jl(Object.assign({},toL(r),{conf:!!r.conferido}));
+}
 function cadAtual(){
   const cad=[];
   st.descs.forEach(d=>cad.push({tipo:'desc',nome:d}));
@@ -1306,7 +1331,7 @@ async function syncNow(){
       const rows=lote.map(({l})=>({id:String(l.id),empresa_id:eid,data:l.data,tipo:l.tipo,fornecedor:l.cat||'',descricao:l.desc||'',conta:l.conta||null,valor:+l.valor||0,status:l.status==='prev'?'prev':'ok',grupo:l.grupo||null,conferido:!!l.conf,criado_por:l._cb||uid,alterado_por:uid,alterado_em:new Date().toISOString()}));
       const {error}=await sb.from('lancamentos').upsert(rows,{onConflict:'id'});
       if(error)throw error;
-      lote.forEach(({l,j})=>{snap.set(String(l.id),j);if(!l._cb)l._cb=uid});
+      lote.forEach(({l,j},i)=>{snap.set(String(l.id),j);confirmarConfPendente(l.id,rows[i].conferido);if(!l._cb)l._cb=uid});
     }
     if(dels.length){
       const {error}=await sb.from('lancamentos').delete().in('id',dels);
@@ -1319,7 +1344,10 @@ async function syncNow(){
   }catch(e){
     console.error(e);
     falhou=true;
-    setSt('Não sincronizou ('+(e.message||'erro')+'): nova tentativa em 20 s','#ff5b5b');
+    const detalhe=e.message||'erro';
+    if(/conferido/i.test(detalhe)){
+      setSt('Conferências guardadas neste aparelho; falta ajustar a coluna conferido no Supabase. Envie esta mensagem ao suporte: '+detalhe,'#ff5b5b');
+    }else setSt('Não sincronizou ('+detalhe+'): nova tentativa em 20 s','#ff5b5b');
     setTimeout(syncNow,20000);
   }finally{
     busy=false;
@@ -1359,7 +1387,7 @@ async function carregarTudo(){
   }else{
     if(st.lancs.length&&!localStorage.getItem(KEY+'_bak'))localStorage.setItem(KEY+'_bak',JSON.stringify(st.lancs));
     st.lancs=rows.map(toL);
-    snap.clear();st.lancs.forEach(l=>snap.set(l.id,jl(l)));
+    snap.clear();rows.forEach(r=>snap.set(String(r.id),snapshotNuvem(r)));
   }
   if(cads&&cads.length){
     st.descs=cads.filter(c=>c.tipo==='desc').map(c=>c.nome).sort((a,b)=>a.localeCompare(b,'pt-BR'));
@@ -1385,7 +1413,7 @@ async function recarregar(){
     if(error)throw error;
     if(busy||dirty||falhou){reloadPend=true;return}
     
-    st.lancs=rows.map(toL);snap.clear();st.lancs.forEach(l=>snap.set(l.id,jl(l)));
+    st.lancs=rows.map(toL);snap.clear();rows.forEach(r=>snap.set(String(r.id),snapshotNuvem(r)));
     st.lancs.forEach(l=>addDesc(l.desc));
     localStorage.setItem(KEY,JSON.stringify(st));
     render();setSt('Atualizado às '+hora(),'#2fbf71');
