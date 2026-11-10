@@ -86,6 +86,7 @@ input,select{background:var(--card2);border:1px solid var(--line);color:var(--tx
   <h1>Fluxo de Caixa<small>Painel de lançamentos · passado, presente e futuro</small></h1>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <span id="syncSt" style="font-size:12px;color:var(--mut)"></span>
+    <button class="btn p" id="btnSalvarAgora" onclick="salvarAgora()">💾 Salvar agora</button>
     <button class="btn" onclick="importarLocal()">Importar dados locais</button>
     <button class="btn" onclick="sair()">Sair</button>
     <button class="btn" id="btnCsv">Exportar CSV (Excel)</button>
@@ -1315,6 +1316,60 @@ function queueSync(){
   dirty=true;setSt('Salvando…','#f5b000');
   clearTimeout(queueSync.t);queueSync.t=setTimeout(syncNow,400);
 }
+async function salvarAgora(){
+  const botao=document.getElementById('btnSalvarAgora');
+  if(botao.disabled)return;
+  botao.disabled=true;botao.textContent='Salvando…';
+  try{
+    // Grava a cópia local imediatamente, sem criar novos lançamentos.
+    localStorage.setItem(KEY,JSON.stringify(st));
+    if(!eid){
+      alert('Informações guardadas neste aparelho. Entre no sistema e aguarde carregar os dados para salvar na nuvem.');
+      return;
+    }
+    if(!navigator.onLine){
+      dirty=true;
+      setSt('Sem internet: salvo neste aparelho; nuvem pendente','#ff8c1a');
+      alert('Salvo neste aparelho, mas sem internet não foi possível salvar na nuvem. Não limpe os dados do navegador. Aguarde a conexão e clique em Salvar agora novamente.');
+      return;
+    }
+    clearTimeout(queueSync.t);
+    // Usa a mesma fila do salvamento automático: nunca envia em paralelo.
+    // O snapshot e o upsert por ID evitam criar cópias dos lançamentos.
+    dirty=true;
+    setSt('Salvando: aguarde a confirmação…','#f5b000');
+    const limite=Date.now()+60000;
+    const esperar=()=>new Promise(resolve=>setTimeout(resolve,100));
+    while(true){
+      while(busy){
+        if(Date.now()>limite)throw new Error('O salvamento está demorando. Ele pode continuar em andamento; aguarde a indicação de sincronização antes de sair.');
+        await esperar();
+      }
+      if(Date.now()>limite)throw new Error('Ainda há alterações pendentes. Aguarde e tente salvar novamente antes de sair.');
+      clearTimeout(queueSync.t);
+      await syncNow();
+      if(falhou)throw new Error('Não foi possível confirmar o salvamento na nuvem. Veja a mensagem no topo do painel e tente novamente.');
+      const pendente=st.lancs.some(l=>snap.get(String(l.id))!==jl(l))
+        ||[...snap.keys()].some(id=>!st.lancs.some(l=>String(l.id)===id))
+        ||JSON.stringify(cadAtual())!==lastCad;
+      if(!busy&&!dirty&&!pendente)break;
+      await esperar();
+    }
+    localStorage.setItem(KEY,JSON.stringify(st));
+    setSt('Salvamento confirmado às '+hora(),'#2fbf71');
+    alert('Salvamento confirmado na nuvem! Todas as alterações registradas foram salvas. Você pode sair do sistema.');
+  }catch(e){
+    console.error(e);
+    alert('Atenção: '+(e.message||'Não foi possível confirmar o salvamento.')+'\nNão saia antes da confirmação se precisa garantir o salvamento na nuvem.');
+  }finally{
+    botao.disabled=false;botao.textContent='💾 Salvar agora';
+  }
+}
+window.addEventListener('beforeunload',function(e){
+  if(eid&&(busy||dirty||falhou)){
+    e.preventDefault();e.returnValue='';
+  }
+});
 async function syncNow(){
   if(!eid)return;
   if(busy){dirty=true;return}
