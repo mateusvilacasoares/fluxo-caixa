@@ -1172,7 +1172,23 @@ function abrirPreLancamentos(){
     const idx=Number($('peCab').value),cab=rows[idx]?.valores||[];let len=cab.length;
     rows.slice(idx+1,idx+20).forEach(r=>len=Math.max(len,r.valores.length));
     const letra=i=>{let s='';for(let k=i+1;k>0;k=Math.floor((k-1)/26))s=String.fromCharCode(65+(k-1)%26)+s;return s};
-    const amostra=i=>rows.slice(idx+1,idx+12).map(r=>String(r.valores[i]??'').trim()).find(Boolean)||'sem exemplo';
+    // O XLSX guarda datas como números de série. Exibe datas legíveis
+    // nas colunas identificadas como Data, sem modificar os valores originais.
+    const amostra=i=>{
+      const linha=rows.slice(idx+1,idx+12).find(r=>String(r.valores[i]??'').trim()!=='');
+      if(!linha)return 'sem exemplo';
+      const bruto=String(linha.valores[i]??'').trim();
+      const titulo=n(cab[i]);
+      const pareceData=/\b(data|date)\b/.test(titulo)&&!/valor|saldo|amount/.test(titulo);
+      if(pareceData){
+        const data=dataExcel(bruto);
+        if(/^\d{4}-\d{2}-\d{2}$/.test(data)){
+          const dt=new Date(data+'T12:00:00');
+          if(!isNaN(dt)&&iso(dt)===data)return fmtData(data);
+        }
+      }
+      return bruto;
+    };
     const opts='<option value="">Selecione uma coluna</option>'+Array.from({length:len},(_,i)=>`<option value="${i}">${letra(i)} — ${esc(cab[i]||'Sem título')} | Ex.: ${esc(amostra(i).slice(0,65))}</option>`).join('');
     ['peData','peDesc','peCat','peValor','peDebito','peTipo'].forEach(id=>$(id).innerHTML=opts);
     const achar=fn=>{const i=cab.findIndex(c=>fn(n(c)));return i<0?'':String(i)};
@@ -1184,13 +1200,13 @@ function abrirPreLancamentos(){
     if(valorCol<0)valorCol=cab.findIndex((c,i)=>String(i)!==dataCol&&/valor|amount|value/.test(n(c))&&!/saldo|data|date/.test(n(c)));
     $('peValor').value=valorCol<0?'':String(valorCol);$('peDebito').value=debito;$('peTipo').value=achar(s=>/^(tipo|natureza|c\/?d)$/.test(s));
     if(credito!==''&&debito!==''){$('peModo').value='separado';$('peValor').value=credito}else $('peModo').value=$('peTipo').value!==''?'tipo':'sinal';
-    msg('Confira a Linha do cabeçalho: ela deve mostrar os títulos Data, Valor e Descrição, não uma movimentação. As opções das colunas mostram a letra e um exemplo do conteúdo. Em Data escolha o exemplo com uma data; em Valor / crédito escolha o exemplo com o valor da movimentação, nunca o saldo.');
+    msg('Confira a Linha do cabeçalho: ela deve mostrar os títulos Data, Valor e Descrição, não uma movimentação. As opções mostram a letra e um exemplo; nas colunas com título Data, os números de série do Excel são apresentados como dd/mm/aaaa. A conversão respeita o calendário do arquivo. Em Valor / crédito escolha o valor da movimentação, nunca o saldo.');
   }
   async function carregarAba(){try{rows=await book.ler(book.folhas[Number($('peAba').value)]);$('peCab').innerHTML=rows.slice(0,50).map((r,i)=>`<option value="${i}">Linha ${esc(r.numero)} — ${esc(r.valores.filter(Boolean).join(' | ').slice(0,150))}</option>`).join('');let h=rows.findIndex(r=>r.valores.some(c=>/^(data|date)(\b|_)/.test(n(c)))&&r.valores.some(c=>/valor|amount|value|credito|debito/.test(n(c))));$('peCab').value=String(h<0?0:h);mapear()}catch(e){msg('Não foi possível ler a aba: '+e.message)}}
   $('peCab').onchange=mapear;$('peAba').onchange=carregarAba;
   $('peArquivo').onchange=async e=>{try{const f=e.target.files[0];if(!f)return;msg('Lendo Excel…');$('peConfig').style.display='none';book=await lerPlanilhaExtrato(f);if(!book.folhas.length)throw new Error('Nenhuma aba encontrada.');$('peAba').innerHTML=book.folhas.map((s,i)=>`<option value="${i}">${esc(s.nome)}</option>`).join('');await carregarAba();$('peConfig').style.display=''}catch(err){msg('Não foi possível abrir o Excel: '+err.message)}};
   function dataExcel(valor){
-    const s=String(valor||'').trim();if(/^\d+(?:\.\d+)?$/.test(s)&&Number(s)>0&&Number(s)<100000){const serial=Math.floor(Number(s)),base=book.epoca1904?Date.UTC(1904,0,1):Date.UTC(1899,11,31),dias=book.epoca1904?serial:serial-(serial>=60?1:0);return new Date(base+dias*86400000).toISOString().slice(0,10)}
+    const s=String(valor??'').trim();if(/^\d+(?:\.\d+)?$/.test(s)&&Number(s)>0&&Number(s)<100000){const serial=Math.floor(Number(s)),base=book.epoca1904?Date.UTC(1904,0,1):Date.UTC(1899,11,31),dias=book.epoca1904?serial:serial-(serial>=60?1:0);return new Date(base+dias*86400000).toISOString().slice(0,10)}
     const m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:\s.*)?$/);return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):normData(s);
   }
   function dinheiroExcel(valor,numerico=false){
