@@ -1171,14 +1171,20 @@ function abrirPreLancamentos(){
   function mapear(){
     const idx=Number($('peCab').value),cab=rows[idx]?.valores||[];let len=cab.length;
     rows.slice(idx+1,idx+20).forEach(r=>len=Math.max(len,r.valores.length));
-    const opts='<option value="">Não selecionar</option>'+Array.from({length:len},(_,i)=>`<option value="${i}">${esc(cab[i]||'Coluna '+(i+1))}</option>`).join('');
+    const letra=i=>{let s='';for(let k=i+1;k>0;k=Math.floor((k-1)/26))s=String.fromCharCode(65+(k-1)%26)+s;return s};
+    const amostra=i=>rows.slice(idx+1,idx+12).map(r=>String(r.valores[i]??'').trim()).find(Boolean)||'sem exemplo';
+    const opts='<option value="">Selecione uma coluna</option>'+Array.from({length:len},(_,i)=>`<option value="${i}">${letra(i)} — ${esc(cab[i]||'Sem título')} | Ex.: ${esc(amostra(i).slice(0,65))}</option>`).join('');
     ['peData','peDesc','peCat','peValor','peDebito','peTipo'].forEach(id=>$(id).innerHTML=opts);
     const achar=fn=>{const i=cab.findIndex(c=>fn(n(c)));return i<0?'':String(i)};
     $('peData').value=achar(s=>/^(data|date)(\b|_)/.test(s));$('peDesc').value=achar(s=>/descri|historico|memo/.test(s));$('peCat').value=achar(s=>/fornecedor|cliente|favorecido|beneficiario/.test(s));
     const credito=achar(s=>/^(credito|credit|entrada|receita)s?$/.test(s)),debito=achar(s=>/^(debito|debit|saida|despesa)s?$/.test(s));
-    $('peValor').value=achar(s=>/valor|amount|value/.test(s)&&!/saldo/.test(s));$('peDebito').value=debito;$('peTipo').value=achar(s=>/^(tipo|natureza|c\/?d)$/.test(s));
+    // Prefere o título exato Valor; nunca usa a coluna Data como valor.
+    const dataCol=$('peData').value;
+    let valorCol=cab.findIndex((c,i)=>String(i)!==dataCol&&/^(valor(?:\s*\(r\$\))?|amount|value)$/.test(n(c)));
+    if(valorCol<0)valorCol=cab.findIndex((c,i)=>String(i)!==dataCol&&/valor|amount|value/.test(n(c))&&!/saldo|data|date/.test(n(c)));
+    $('peValor').value=valorCol<0?'':String(valorCol);$('peDebito').value=debito;$('peTipo').value=achar(s=>/^(tipo|natureza|c\/?d)$/.test(s));
     if(credito!==''&&debito!==''){$('peModo').value='separado';$('peValor').value=credito}else $('peModo').value=$('peTipo').value!==''?'tipo':'sinal';
-    msg('Confira o cabeçalho e as colunas antes de gerar a prévia. As primeiras linhas poderão conter títulos do banco.');
+    msg('Confira a Linha do cabeçalho: ela deve mostrar os títulos Data, Valor e Descrição, não uma movimentação. As opções das colunas mostram a letra e um exemplo do conteúdo. Em Data escolha o exemplo com uma data; em Valor / crédito escolha o exemplo com o valor da movimentação, nunca o saldo.');
   }
   async function carregarAba(){try{rows=await book.ler(book.folhas[Number($('peAba').value)]);$('peCab').innerHTML=rows.slice(0,50).map((r,i)=>`<option value="${i}">Linha ${esc(r.numero)} — ${esc(r.valores.filter(Boolean).join(' | ').slice(0,150))}</option>`).join('');let h=rows.findIndex(r=>r.valores.some(c=>/^(data|date)(\b|_)/.test(n(c)))&&r.valores.some(c=>/valor|amount|value|credito|debito/.test(n(c))));$('peCab').value=String(h<0?0:h);mapear()}catch(e){msg('Não foi possível ler a aba: '+e.message)}}
   $('peCab').onchange=mapear;$('peAba').onchange=carregarAba;
@@ -1198,7 +1204,10 @@ function abrirPreLancamentos(){
   $('peGerar').onclick=()=>{
     if(draft.itens.length&&!confirm('Substituir os rascunhos atuais pela leitura deste arquivo?'))return;
     const di=$('peData').value,vi=$('peValor').value,ds=$('peDesc').value,ci=$('peCat').value,ti=$('peTipo').value,de=$('peDebito').value,modo=$('peModo').value,ini=$('peIni').value,fim=$('peFim').value;
-    if(di===''||vi===''||di===vi)return alert('Escolha colunas distintas de data e valor.');
+    if(!book||!rows.length)return alert('Selecione o Excel e aguarde a leitura da aba antes de gerar a prévia.');
+    if(di==='')return alert('Falta selecionar a coluna DATA. No campo Data, escolha a opção cujo exemplo contém a data da movimentação. Se os títulos não aparecem, ajuste Linha do cabeçalho.');
+    if(vi==='')return alert('Falta selecionar a coluna VALOR / CRÉDITO. Escolha a opção cujo exemplo contém o valor da movimentação, não o saldo. Se os títulos não aparecem, ajuste Linha do cabeçalho.');
+    if(di===vi)return alert('A mesma coluna foi escolhida nos dois campos:\n'+$('peData').selectedOptions[0].textContent+'\n\nMantenha essa coluna em apenas um campo. Data deve apontar para a data da movimentação; Valor / crédito deve apontar para o valor. Confira a letra e o exemplo em cada opção.');
     if(ini&&fim&&ini>fim)return alert('Período inválido.');
     if(modo==='tipo'&&(ti===''||ti===vi))return alert('Escolha a coluna de tipo, diferente da de valor.');
     if(modo==='separado'&&(de===''||de===vi))return alert('Escolha colunas diferentes de crédito e débito.');
